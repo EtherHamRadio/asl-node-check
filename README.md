@@ -1,6 +1,8 @@
 # asl-node-check
 
-Version 1.1, October 22, 2026
+Version 1.2, October 22, 2026
+
+**For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
 A plain-language security check for AllStarLink 3 (ASL3) nodes, written for node owners who aren't Linux administrators. Run one command, and it tells you what needs attention and exactly what to do about it.
 
@@ -8,7 +10,7 @@ It was written in response to the October 2026 "PHP2Shell" flaws (CVE-2026-10961
 
 ## What It Checks
 
-- **Operating system:** whether your system still gets security updates, and whether a restart is waiting to finish an earlier update. It recognizes HamVoIP and tells you why it can't be patched.
+- **Operating system:** that the node runs ASL3, whether the system still gets security updates, and whether a restart is waiting to finish an earlier update.
 - **Updates:** how many updates are waiting, how many are security updates, and whether automatic security updates are turned on.
 - **PHP:** whether PHP is installed, whether it has the PHP2Shell fix, and whether your web server is still running the old PHP from before an update.
 - **Exposure to the internet:** whether your node has a public address, whether its web dashboard is listening, and whether a firewall and fail2ban are running.
@@ -89,5 +91,6 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
+- Version 1.2, October 22, 2026: Checks that the node runs ASL3, and stops with an explanation on HamVoIP, ASL2, or any other system.
 - Version 1.1, October 22, 2026: Each suggested command now appears on its own line, so it doesn't wrap mid-command. Fixed spacing in the list of dashboards found. Added the README section on copying the script to a node.
 - Version 1.0, October 22, 2026: First version, tested on one ASL3 node.
