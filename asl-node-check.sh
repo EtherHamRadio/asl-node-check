@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # asl-node-check.sh — a plain-language security check for AllStarLink 3 nodes
-# Version 1.1 (October 22, 2026)
+#
+# FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
+# stops on anything else.
+# Version 1.2 (October 22, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -18,7 +21,7 @@
 # The report does not print passwords, IP addresses, or MAC addresses, so it's
 # reasonably safe to share when asking for help. Read it over first anyway.
 
-VERSION="1.1"
+VERSION="1.2"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -105,6 +108,20 @@ if ! have dpkg; then
       "This script is written for AllStarLink 3, which runs on Debian 12 or 13 (including Raspberry Pi OS)."
   exit 1
 fi
+
+# This script is for AllStarLink 3 only. ASL3 installs the "asl3" package.
+if ! pkg_installed asl3 && ! pkg_installed asl3-asterisk; then
+  if [ -d /etc/asterisk ] || have asterisk; then
+    bad "This node runs AllStarLink, but not version 3. It's most likely ASL2 or older." \
+        "This script only checks ASL3 nodes. ASL2 runs on Debian releases that no longer get security updates, so plan a move to ASL3 (Debian 13). Back up your settings in /etc/asterisk first."
+  else
+    bad "AllStarLink 3 doesn't appear to be installed on this computer." \
+        "This script only checks ASL3 nodes. Run it on the node itself."
+  fi
+  echo; echo "Stopping here: this script is for AllStarLink 3 (ASL3) nodes only."
+  exit 1
+fi
+ok "AllStarLink 3 is installed."
 
 case "$OS_CODENAME" in
   trixie)   ok "$OS_PRETTY: current Debian release, receiving security updates." ;;
