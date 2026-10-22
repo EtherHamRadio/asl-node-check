@@ -20,7 +20,7 @@ It was written in response to the October 2026 "PHP2Shell" flaws (CVE-2026-10961
 
 It doesn't install, remove, or change anything on your node. The only thing it updates is the list of available updates (it runs `apt-get update`), so its answers are current.
 
-It can't see your router, your passwords, or your online accounts. If your router forwards a port to your node, the script can't tell. Check your router's port forwarding page yourself.
+It can't see your router, your passwords, or your online accounts. If your router forwards a port to your node, the script can't tell. You should check your router's port forwarding page yourself.
 
 ## How to Run It
 
