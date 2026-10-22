@@ -70,6 +70,12 @@ pscp -P 2222 -i "C:\path\to\your-key.ppk" .\asl-node-check.sh yourname@192.168.1
 
 If you use a regular OpenSSH key instead, the built-in `scp` works the same way, with `-P` for the port and `-i` for the key.
 
+## What the Report Looks Like
+
+This is the report from a Raspberry Pi node running the standard ASL3 image, before it was updated. Within ten minutes, every [FIX ] item was cleared.
+
+![Terminal output of the AllStarLink node security check on a Raspberry Pi node. It flags two items to fix: 19 updates waiting, including 13 security updates, and PHP 8.4.26, one release short of the PHP2Shell fix in 8.4.27. It also warns that automatic security updates are off and that several services are running old code, and gives the exact command to fix each item. The summary reads 7 OK, 2 worth a look, 2 to fix.](docs/sample-report.png)
+
 ## Reading the Results
 
 Each line starts with one of these labels:
