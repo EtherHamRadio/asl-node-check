@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 1.2 (October 22, 2026)
+# Version 1.3 (October 22, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -21,7 +21,7 @@
 # The report does not print passwords, IP addresses, or MAC addresses, so it's
 # reasonably safe to share when asking for help. Read it over first anyway.
 
-VERSION="1.2"
+VERSION="1.3"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -165,7 +165,7 @@ if [ "$UPGRADABLE" -eq 0 ]; then
   fi
 elif [ "$SEC_UPGRADABLE" -gt 0 ]; then
   bad "$UPGRADABLE update(s) waiting, including $SEC_UPGRADABLE security update(s)." \
-      "Install the updates, then restart:" '$ sudo apt update && sudo apt upgrade' '$ sudo reboot'
+      "Install the updates, then run this script again. It will tell you whether anything needs restarting:" '$ sudo apt update && sudo apt upgrade' '$ sudo bash asl-node-check.sh'
 else
   warn "$UPGRADABLE update(s) waiting (none marked as security updates)." \
        "When convenient, run:" '$ sudo apt update && sudo apt upgrade'
@@ -177,6 +177,44 @@ if pkg_installed unattended-upgrades && \
 else
   warn "Automatic security updates are not turned on." \
        "Run these two commands, and answer Yes when asked:" '$ sudo apt install unattended-upgrades' '$ sudo dpkg-reconfigure -plow unattended-upgrades'
+fi
+
+# Programs still running old code from before an update (a library or program
+# was replaced on disk, but the running copy in memory is the old one).
+if [ -f /var/run/reboot-required ]; then
+  info "Skipping the check for programs running old code, since a restart is already waiting (see section 1)."
+elif ! is_root; then
+  info "Checking for programs still running old code needs root."
+else
+  SAFE=(); LATER=(); ASTERISK_OLD=0
+  while read -r pid; do
+    unit=$(ps -o unit= -p "$pid" 2>/dev/null | tr -d ' ')
+    case "$unit" in
+      ""|-) continue ;;
+      asterisk.service) ASTERISK_OLD=1 ;;
+      *.scope|user@*|dbus.service|dbus-broker.service|systemd-*|getty@*|serial-getty@*)
+        [[ " ${LATER[*]} " == *" ${unit%.service} "* ]] || LATER+=("${unit%.service}") ;;
+      *.service)
+        [[ " ${SAFE[*]} " == *" ${unit%.service} "* ]] || SAFE+=("${unit%.service}") ;;
+    esac
+  done < <(grep -lE ' /(usr/)?(lib|lib64|bin|sbin)/[^ ]* \(deleted\)$' /proc/[0-9]*/maps 2>/dev/null | cut -d/ -f3 | sort -un)
+
+  if [ "${#SAFE[@]}" -eq 0 ] && [ "$ASTERISK_OLD" -eq 0 ] && [ "${#LATER[@]}" -eq 0 ]; then
+    ok "No running programs are using old code from before an update."
+  fi
+  if [ "${#SAFE[@]}" -gt 0 ]; then
+    warn "Some services are still running old code from before an update: ${SAFE[*]}." \
+         "Restart them with this command. No reboot needed, and it doesn't affect your node's connections:" \
+         "\$ sudo systemctl restart ${SAFE[*]}"
+  fi
+  if [ "$ASTERISK_OLD" -eq 1 ]; then
+    warn "Asterisk (the node itself) is still running old code from before an update." \
+         "Restarting it briefly drops every connected station, so pick a quiet moment:" \
+         '$ sudo systemctl restart asterisk'
+  fi
+  if [ "${#LATER[@]}" -gt 0 ]; then
+    info "A few core system services (${LATER[*]}) will pick up updates at the next reboot. There's no hurry."
+  fi
 fi
 
 # ---------- 3. PHP (web dashboards) ----------
@@ -209,7 +247,7 @@ else
       ok "PHP $branch ($up) includes the PHP2Shell fix (confirmed in its changelog)."
     elif [ -n "$fixed" ]; then
       bad "PHP $branch is version $up. The PHP2Shell fix arrived in $fixed." \
-          "Install the updates, then restart:" '$ sudo apt update && sudo apt upgrade' '$ sudo reboot'
+          "Install the updates, then run this script again. It will tell you whether anything needs restarting:" '$ sudo apt update && sudo apt upgrade' '$ sudo bash asl-node-check.sh'
     else
       bad "PHP $branch is too old to receive the PHP2Shell fix from Debian." \
           "Move to a current ASL3 image (Debian 13), or remove PHP if no dashboard needs it."
@@ -225,7 +263,7 @@ else
       started=$(svc_started_at "$svc"); changed=$(pkg_changed_at "$srcpkg")
       if [ "$started" -gt 0 ] && [ "$changed" -gt "$started" ]; then
         bad "$svc has been running since before PHP was last updated, so it may still be using the old code." \
-            "Restart it (or restart the whole node with: sudo reboot):" "\$ sudo systemctl restart $svc"
+            "Restart it. This doesn't affect your node's connections:" "\$ sudo systemctl restart $svc"
       else
         ok "$svc is running the currently installed PHP."
       fi
@@ -249,26 +287,18 @@ done < <(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}')
 WEB_LISTEN=0
 if have ss && ss -Hltn 2>/dev/null | awk '{print $4}' | grep -Eq '[:.](80|443)$'; then WEB_LISTEN=1; fi
 
-if [ "$PUBLIC_V4" -eq 1 ]; then
-  info "This node has a public internet address (for example, a rented server or a 44Net address)."
-  if [ "$WEB_LISTEN" -eq 1 ]; then
-    warn "Its web dashboard is reachable from the whole internet unless a firewall blocks it." \
-         "Make sure the dashboard is password-protected and kept up to date, and consider limiting who can reach it."
-  fi
-else
-  info "This node uses a private (home network) address."
-  if [ "$WEB_LISTEN" -eq 1 ]; then
-    info "Its web dashboard is reachable on your home network. This script can't see your router."
-    echo "         Check your router: if it forwards port 80 or 443 to this node, the dashboard is on the open internet."
-    echo "         For access from away, a VPN such as Tailscale or WireGuard is safer than a port forward."
-  fi
-fi
-
 FW=""
-if have ufw && ufw status 2>/dev/null | grep -q '^Status: active'; then FW="ufw"
+if have ufw && is_root && ufw status 2>/dev/null | grep -q '^Status: active'; then FW="ufw"
 elif svc_active firewalld; then FW="firewalld"
 elif is_root && have nft && [ "$(nft list ruleset 2>/dev/null | grep -c 'hook input')" -gt 0 ]; then FW="nftables"
 fi
+
+if [ "$PUBLIC_V4" -eq 1 ]; then
+  info "This node has a public internet address (for example, a rented server or a 44Net address)."
+else
+  info "This node uses a private (home network) address."
+fi
+
 if [ -n "$FW" ]; then
   ok "A firewall is active ($FW)."
 elif ! is_root; then
@@ -278,6 +308,33 @@ elif [ "$PUBLIC_V4" -eq 1 ]; then
       "Set one up that allows only SSH and the ports your node needs. Allow SSH first, or you'll lock yourself out."
 else
   info "No firewall is active on the node. Behind a home router that's common, but a firewall adds a layer."
+fi
+
+if [ "$WEB_LISTEN" -eq 1 ] && [ "$PUBLIC_V4" -eq 1 ]; then
+  if [ "$FW" = "ufw" ]; then
+    # Firewall rules that let web traffic (port 80 or 443, or a web server profile) in
+    WEB_RULES=$(ufw status 2>/dev/null | grep -E '[[:space:]](ALLOW|LIMIT)([[:space:]]+IN)?[[:space:]]' \
+                | grep -Ei '^((apache|www|nginx)|([0-9]+,)*(80|443)(,[0-9]+)*(/tcp)?[[:space:]])')
+    if [ -z "$WEB_RULES" ]; then
+      ok "The firewall blocks the web dashboard from the internet."
+    elif echo "$WEB_RULES" | grep -q 'Anywhere'; then
+      warn "The firewall lets anyone on the internet reach the web dashboard (port 80 or 443)." \
+           "That's normal for a public hub. Make sure the dashboard is password-protected and kept up to date." \
+           "If only you use it, allow just your own address instead, or reach it over a VPN such as Tailscale."
+    else
+      ok "The firewall lets only specific addresses reach the web dashboard."
+    fi
+  elif [ -n "$FW" ]; then
+    warn "The web dashboard may be reachable from the internet. This script can only read ufw rules, not $FW." \
+         "Check that your $FW rules allow ports 80 and 443 only from where you intend."
+  elif is_root; then
+    warn "The web dashboard is reachable from the whole internet." \
+         "Make sure it's password-protected and kept up to date, and set up a firewall (see above)."
+  fi
+elif [ "$WEB_LISTEN" -eq 1 ]; then
+  info "Its web dashboard is reachable on your home network. This script can't see your router."
+  echo "         Check your router: if it forwards port 80 or 443 to this node, the dashboard is on the open internet."
+  echo "         For access from away, a VPN such as Tailscale or WireGuard is safer than a port forward."
 fi
 
 if svc_active fail2ban; then
