@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 1.4 (October 22, 2026)
+# Version 1.5 (October 22, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -21,7 +21,7 @@
 # The report does not print passwords, IP addresses, or MAC addresses, so it's
 # reasonably safe to share when asking for help. Read it over first anyway.
 
-VERSION="1.4"
+VERSION="1.5"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -135,9 +135,9 @@ case "$OS_CODENAME" in
 esac
 
 if [ -f /var/run/reboot-required ]; then
-  warn "A restart is waiting to finish an earlier update." "Restart the node with:" '$ sudo reboot'
+  warn "The system says a restart is needed to finish an earlier update." "Restart the node at a quiet moment:" '$ sudo reboot'
 else
-  ok "No restart is waiting from earlier updates."
+  ok "The system hasn't asked for a restart. (Section 2 checks whether any programs still need one.)"
 fi
 
 # ---------- 2. Updates ----------
@@ -355,6 +355,31 @@ elif [ "$WEB_LISTEN" -eq 1 ]; then
   info "Its web dashboard is reachable on your home network. This script can't see your router."
   echo "         Check your router: if it forwards port 80 or 443 to this node, the dashboard is on the open internet."
   echo "         For access from away, a VPN such as Tailscale or WireGuard is safer than a port forward."
+fi
+
+# Cockpit: the web admin console on port 9090 (included in the ASL3 Raspberry Pi image)
+COCKPIT=0
+if svc_active cockpit.socket || svc_active cockpit; then COCKPIT=1
+elif have ss && ss -Hltn 2>/dev/null | awk '{print $4}' | grep -Eq '[:.]9090$'; then COCKPIT=1; fi
+if [ "$COCKPIT" -eq 1 ]; then
+  if [ "$PUBLIC_V4" -eq 1 ]; then
+    OPEN9090=unknown
+    if [ "$FW" = "ufw" ]; then
+      if ufw status 2>/dev/null | grep -E '[[:space:]](ALLOW|LIMIT)' | grep -Eq '^(9090|([0-9]+,)*9090(,[0-9]+)*)(/tcp)?[[:space:]].*Anywhere'; then OPEN9090=yes; else OPEN9090=no; fi
+    elif [ "$FW" = "firewalld" ] && have firewall-cmd; then
+      if firewall-cmd --list-all 2>/dev/null | grep -Eq '(services:.*\bcockpit\b|ports:.*\b9090/tcp\b)'; then OPEN9090=yes; else OPEN9090=no; fi
+    fi
+    case "$OPEN9090" in
+      no)  ok "The Cockpit web console (port 9090) is running, and the firewall blocks it from the internet." ;;
+      yes) bad "The Cockpit web console (port 9090) is open to the whole internet. Cockpit gives full control of this node." \
+               "Block port 9090 in your firewall, and reach Cockpit over a VPN such as Tailscale instead." ;;
+      *)   warn "The Cockpit web console (port 9090) is running, and this node has a public address. Cockpit gives full control of this node." \
+                "Make sure your firewall blocks port 9090 from the internet, and reach Cockpit over a VPN such as Tailscale." ;;
+    esac
+  else
+    info "The Cockpit web console (port 9090) is running. It gives full control of this node,"
+    echo "         so never forward port 9090 on your router. Use a VPN such as Tailscale to reach it from away."
+  fi
 fi
 
 if svc_active fail2ban; then

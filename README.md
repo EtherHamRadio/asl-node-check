@@ -1,6 +1,6 @@
 # asl-node-check
 
-Version 1.4, October 22, 2026
+Version 1.5, October 22, 2026
 
 **For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
@@ -13,7 +13,7 @@ It was written in response to the October 2026 "PHP2Shell" flaws (CVE-2026-10961
 - **Operating system:** that the node runs ASL3, whether the system still gets security updates, and whether a restart is waiting to finish an earlier update.
 - **Updates:** how many updates are waiting, how many are security updates, and whether automatic security updates are turned on. It also finds programs still running old code from before an update, and tells you exactly which services to restart, so you rarely need a full reboot.
 - **PHP:** whether PHP is installed, whether it has the PHP2Shell fix, and whether your web server is still running the old PHP from before an update.
-- **Exposure to the internet:** whether your node has a public address, whether a firewall and fail2ban are running, and, if the firewall is ufw, whether it lets the whole internet reach your web dashboard.
+- **Exposure to the internet:** whether your node has a public address, whether a firewall and fail2ban are running, and, if the firewall is ufw, whether it lets the whole internet reach your web dashboard. On nodes running the Cockpit web console (included in the ASL3 Raspberry Pi image), it checks whether Cockpit is exposed to the internet.
 - **Logins:** whether SSH allows direct root logins or password logins.
 
 ## What It Doesn't Do
@@ -91,6 +91,7 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
+- Version 1.5, October 22, 2026: Clearer wording when the system hasn't asked for a restart but some programs still need one. Checks whether the Cockpit web console (port 9090) is exposed to the internet.
 - Version 1.4, October 22, 2026: When many services, or core parts of the system, are running old code, recommends one reboot instead of a long restart command. Never suggests restarting network services by hand, since that can drop your SSH session.
 - Version 1.3, October 22, 2026: Finds services still running old code after an update and gives the command to restart them, noting that restarting Asterisk briefly drops connected stations. Recommends a reboot only when the system asks for one. Reads ufw rules to say whether the web dashboard is open to the whole internet, only to specific addresses, or blocked.
 - Version 1.2, October 22, 2026: Checks that the node runs ASL3, and stops with an explanation on HamVoIP, ASL2, or any other system.
