@@ -1,6 +1,6 @@
 # asl-node-check
 
-Version 1.3, October 22, 2026
+Version 1.4, October 22, 2026
 
 **For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
@@ -91,6 +91,7 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
+- Version 1.4, October 22, 2026: When many services, or core parts of the system, are running old code, recommends one reboot instead of a long restart command. Never suggests restarting network services by hand, since that can drop your SSH session.
 - Version 1.3, October 22, 2026: Finds services still running old code after an update and gives the command to restart them, noting that restarting Asterisk briefly drops connected stations. Recommends a reboot only when the system asks for one. Reads ufw rules to say whether the web dashboard is open to the whole internet, only to specific addresses, or blocked.
 - Version 1.2, October 22, 2026: Checks that the node runs ASL3, and stops with an explanation on HamVoIP, ASL2, or any other system.
 - Version 1.1, October 22, 2026: Each suggested command now appears on its own line, so it doesn't wrap mid-command. Fixed spacing in the list of dashboards found. Added the README section on copying the script to a node.

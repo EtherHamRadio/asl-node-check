@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 1.3 (October 22, 2026)
+# Version 1.4 (October 22, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -21,7 +21,7 @@
 # The report does not print passwords, IP addresses, or MAC addresses, so it's
 # reasonably safe to share when asking for help. Read it over first anyway.
 
-VERSION="1.3"
+VERSION="1.4"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -186,34 +186,54 @@ if [ -f /var/run/reboot-required ]; then
 elif ! is_root; then
   info "Checking for programs still running old code needs root."
 else
-  SAFE=(); LATER=(); ASTERISK_OLD=0
+  SAFE=(); NET=(); LATER=(); ASTERISK_OLD=0; CORE_OLD=0
+  add() { local -n arr=$1; [[ " ${arr[*]} " == *" $2 "* ]] || arr+=("$2"); }
   while read -r pid; do
     unit=$(ps -o unit= -p "$pid" 2>/dev/null | tr -d ' ')
+    name=${unit%.service}
     case "$unit" in
       ""|-) continue ;;
       asterisk.service) ASTERISK_OLD=1 ;;
-      *.scope|user@*|dbus.service|dbus-broker.service|systemd-*|getty@*|serial-getty@*)
-        [[ " ${LATER[*]} " == *" ${unit%.service} "* ]] || LATER+=("${unit%.service}") ;;
-      *.service)
-        [[ " ${SAFE[*]} " == *" ${unit%.service} "* ]] || SAFE+=("${unit%.service}") ;;
+      # systemd itself, login sessions, and core system services: next reboot
+      init.scope|*.scope|user@*) CORE_OLD=1 ;;
+      dbus.service|dbus-broker.service|systemd-*|getty@*|serial-getty@*) CORE_OLD=1; add LATER "$name" ;;
+      # restarting these can briefly drop the network, including your SSH session
+      NetworkManager.service|ModemManager.service|networking.service|wpa_supplicant*|dhcpcd.service|tailscaled.service|wg-quick@*|ifup@*)
+        add NET "$name" ;;
+      *.service) add SAFE "$name" ;;
     esac
   done < <(grep -lE ' /(usr/)?(lib|lib64|bin|sbin)/[^ ]* \(deleted\)$' /proc/[0-9]*/maps 2>/dev/null | cut -d/ -f3 | sort -un)
 
-  if [ "${#SAFE[@]}" -eq 0 ] && [ "$ASTERISK_OLD" -eq 0 ] && [ "${#LATER[@]}" -eq 0 ]; then
+  TOTAL=$(( ${#SAFE[@]} + ${#NET[@]} + ASTERISK_OLD ))
+  if [ "$TOTAL" -eq 0 ] && [ "$CORE_OLD" -eq 0 ]; then
     ok "No running programs are using old code from before an update."
-  fi
-  if [ "${#SAFE[@]}" -gt 0 ]; then
-    warn "Some services are still running old code from before an update: ${SAFE[*]}." \
-         "Restart them with this command. No reboot needed, and it doesn't affect your node's connections:" \
-         "\$ sudo systemctl restart ${SAFE[*]}"
-  fi
-  if [ "$ASTERISK_OLD" -eq 1 ]; then
-    warn "Asterisk (the node itself) is still running old code from before an update." \
-         "Restarting it briefly drops every connected station, so pick a quiet moment:" \
-         '$ sudo systemctl restart asterisk'
-  fi
-  if [ "${#LATER[@]}" -gt 0 ]; then
-    info "A few core system services (${LATER[*]}) will pick up updates at the next reboot. There's no hurry."
+  elif [ "$TOTAL" -gt 6 ] || { [ "$CORE_OLD" -eq 1 ] && [ "$TOTAL" -gt 2 ]; }; then
+    # Many things, or the core system plus several services: one reboot is simpler and safer
+    warn "Many services ($TOTAL), including core parts of the system, are still running old code from earlier updates." \
+         "The simplest fix is to restart the node at a quiet moment. It's offline for about a minute, and connected stations drop:" \
+         '$ sudo reboot'
+  else
+    if [ "${#SAFE[@]}" -gt 0 ]; then
+      warn "Some services are still running old code from before an update: ${SAFE[*]}." \
+           "Restart them with this command. No reboot needed, and it doesn't affect your node's connections:" \
+           "\$ sudo systemctl restart ${SAFE[*]}"
+    fi
+    if [ "$ASTERISK_OLD" -eq 1 ]; then
+      warn "Asterisk (the node itself) is still running old code from before an update." \
+           "Restarting it briefly drops every connected station, so pick a quiet moment:" \
+           '$ sudo systemctl restart asterisk'
+    fi
+    if [ "${#NET[@]}" -gt 0 ]; then
+      info "Network services (${NET[*]}) are running old code. Restarting them can briefly drop the network,"
+      echo "         including your SSH session, so let them pick up the update at the next reboot."
+    fi
+    if [ "$CORE_OLD" -eq 1 ]; then
+      if [ "${#LATER[@]}" -gt 0 ]; then
+        info "A few core system services (${LATER[*]}) will pick up updates at the next reboot. There's no hurry."
+      else
+        info "Core parts of the system will pick up updates at the next reboot. There's no hurry."
+      fi
+    fi
   fi
 fi
 
