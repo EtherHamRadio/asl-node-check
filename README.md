@@ -1,6 +1,6 @@
 # asl-node-check
 
-Version 1.5, October 22, 2026
+Version 1.6, October 29, 2026
 
 **For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
@@ -97,6 +97,7 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
+- Version 1.6, October 29, 2026: Gives the right fix for automatic security updates. If the unattended-upgrades package is missing, it suggests only installing it, since on Debian that turns automatic updates on by itself. If the package is installed but switched off, it suggests dpkg-reconfigure. Tested on a second ASL3 node (Debian 13 on an x86 laptop).
 - Version 1.5, October 22, 2026: Clearer wording when the system hasn't asked for a restart but some programs still need one. Checks whether the Cockpit web console (port 9090) is exposed to the internet.
 - Version 1.4, October 22, 2026: When many services, or core parts of the system, are running old code, recommends one reboot instead of a long restart command. Never suggests restarting network services by hand, since that can drop your SSH session.
 - Version 1.3, October 22, 2026: Finds services still running old code after an update and gives the command to restart them, noting that restarting Asterisk briefly drops connected stations. Recommends a reboot only when the system asks for one. Reads ufw rules to say whether the web dashboard is open to the whole internet, only to specific addresses, or blocked.

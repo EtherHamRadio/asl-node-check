@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 1.5 (October 22, 2026)
+# Version 1.6 (October 29, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -21,7 +21,7 @@
 # The report does not print passwords, IP addresses, or MAC addresses, so it's
 # reasonably safe to share when asking for help. Read it over first anyway.
 
-VERSION="1.5"
+VERSION="1.6"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -171,12 +171,20 @@ else
        "When convenient, run:" '$ sudo apt update && sudo apt upgrade'
 fi
 
+# On Debian, installing unattended-upgrades turns automatic updates on by itself
+# (its default answer is Yes). dpkg-reconfigure is only needed if someone once
+# answered No, so suggest it only when the package is installed but switched off.
 if pkg_installed unattended-upgrades && \
    apt-config dump 2>/dev/null | grep -q 'APT::Periodic::Unattended-Upgrade "1"'; then
   ok "Automatic security updates are turned on."
-else
+elif ! pkg_installed unattended-upgrades; then
   warn "Automatic security updates are not turned on." \
-       "Run these two commands, and answer Yes when asked:" '$ sudo apt install unattended-upgrades' '$ sudo dpkg-reconfigure -plow unattended-upgrades'
+       "Run this command. Installing it turns automatic updates on:" '$ sudo apt install unattended-upgrades' \
+       "Then run this script again to confirm."
+else
+  warn "Automatic security updates are installed but switched off." \
+       "Run this command, and answer Yes when asked:" '$ sudo dpkg-reconfigure -plow unattended-upgrades' \
+       "Then run this script again to confirm."
 fi
 
 # Programs still running old code from before an update (a library or program
