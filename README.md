@@ -39,8 +39,10 @@ The first time, it asks whether to trust the node. Type `yes` and press Enter, t
 **Step 3.** Download the script to your node:
 
 ```
-wget https://raw.githubusercontent.com/EtherHamRadio/asl-node-check/main/asl-node-check.sh
+wget -O asl-node-check.sh https://raw.githubusercontent.com/EtherHamRadio/asl-node-check/main/asl-node-check.sh
 ```
+
+The `-O asl-node-check.sh` part (a capital letter O) tells wget to replace any older copy. Without it, if you already have the script, wget saves the new download as `asl-node-check.sh.1`, and you keep running the old version without realizing it.
 
 **Step 4.** Run it:
 
@@ -49,6 +51,16 @@ sudo bash asl-node-check.sh
 ```
 
 Type your password if asked. The check takes about a minute, mostly while it downloads the latest list of updates.
+
+## Getting a Newer Version
+
+The first line of the report shows which version you ran, for example `AllStarLink node security check, version 1.6`. The newest version is listed at the top of this page. If yours is older, run Step 3 again, then Step 4.
+
+If you see a file named `asl-node-check.sh.1` (or `.2`, `.3`) in your home folder, an older download left it there. You can remove those extra copies:
+
+```
+rm asl-node-check.sh.[0-9]*
+```
 
 ## If You Downloaded the Script to Your Computer Instead
 
