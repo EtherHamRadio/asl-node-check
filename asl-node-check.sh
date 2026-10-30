@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 1.6 (October 29, 2026)
+# Version 1.7 (October 30, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -21,7 +21,10 @@
 # The report does not print passwords, IP addresses, or MAC addresses, so it's
 # reasonably safe to share when asking for help. Read it over first anyway.
 
-VERSION="1.6"
+# Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
+# its own VERSION variable, which would overwrite ours.
+SCRIPT_VERSION="1.7"
+REPO_RAW="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check/main"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -29,13 +32,16 @@ declare -A PHP_FIXED=( ["8.2"]="8.2.35" ["8.3"]="8.3.36" ["8.4"]="8.4.27" ["8.5"
 PHP_CVE="CVE-2026-109618"
 
 REFRESH=1
+UPDATE_CHECK=1
 for arg in "$@"; do
   case "$arg" in
     --no-refresh) REFRESH=0 ;;
-    --version) echo "asl-node-check $VERSION"; exit 0 ;;
+    --no-update-check) UPDATE_CHECK=0 ;;
+    --version) echo "asl-node-check $SCRIPT_VERSION"; exit 0 ;;
     -h|--help)
-      echo "Usage: sudo bash asl-node-check.sh [--no-refresh]"
-      echo "  --no-refresh   don't run apt-get update first (uses the last downloaded list)"
+      echo "Usage: sudo bash asl-node-check.sh [--no-refresh] [--no-update-check]"
+      echo "  --no-refresh        don't run apt-get update first (uses the last downloaded list)"
+      echo "  --no-update-check   don't check GitHub for a newer version of this script"
       exit 0 ;;
     *) echo "Unknown option: $arg (try --help)"; exit 2 ;;
   esac
@@ -78,8 +84,30 @@ svc_started_at() {
 }
 svc_active() { systemctl is-active --quiet "$1" 2>/dev/null; }
 
-echo "${C_B}AllStarLink node security check, version $VERSION${C_0}"
+echo "${C_B}AllStarLink node security check, version $SCRIPT_VERSION${C_0}"
 echo "Run on $(date '+%Y-%m-%d %H:%M %Z'). This script doesn't change your node's settings."
+
+# ---------- Is this copy of the script current? ----------
+# Reads the one-line VERSION file from the GitHub repo. If GitHub can't be
+# reached, or the answer doesn't look like a version number, it says nothing.
+NEWER_VERSION=""
+if [ "$UPDATE_CHECK" -eq 1 ]; then
+  latest=""
+  if have curl; then
+    latest=$(curl -fsS --max-time 5 "$REPO_RAW/VERSION" 2>/dev/null)
+  elif have wget; then
+    latest=$(wget -q -T 5 -t 1 -O - "$REPO_RAW/VERSION" 2>/dev/null)
+  fi
+  latest=$(printf '%s' "$latest" | head -n 1 | tr -d '[:space:]')
+  if [[ "$latest" =~ ^[0-9]+(\.[0-9]+)+$ ]] && [ "$latest" != "$SCRIPT_VERSION" ] \
+     && [ "$(printf '%s\n%s\n' "$SCRIPT_VERSION" "$latest" | sort -V | tail -n 1)" = "$latest" ]; then
+    NEWER_VERSION="$latest"
+    echo
+    echo "${C_WARN}Newer version available:${C_0} you're running $SCRIPT_VERSION; version $latest is out."
+    echo "To get it, run this, then run the check again:"
+    echo "    wget -O asl-node-check.sh $REPO_RAW/asl-node-check.sh"
+  fi
+fi
 
 if ! is_root; then
   echo
@@ -436,4 +464,7 @@ else
   echo "  Nothing needs attention right now. Run this again after the next security news."
 fi
 echo "  Reminder: this script can't see your router, your passwords, or your accounts."
+if [ -n "$NEWER_VERSION" ]; then
+  echo "  This report came from version $SCRIPT_VERSION. Version $NEWER_VERSION is available; see the top of the report."
+fi
 [ "$N_BAD" -gt 0 ] && exit 1 || exit 0

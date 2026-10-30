@@ -1,6 +1,6 @@
 # asl-node-check
 
-Version 1.6, October 29, 2026
+Version 1.7, October 30, 2026
 
 **For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
@@ -19,6 +19,8 @@ It was written in response to the October 2026 "PHP2Shell" flaws (CVE-2026-10961
 ## What It Doesn't Do
 
 It doesn't install, remove, or change anything on your node. The only thing it updates is the list of available updates (it runs `apt-get update`), so its answers are current.
+
+It also checks GitHub for a newer version of itself by reading the small `VERSION` file in this repository. Nothing about your node is sent; it's an ordinary web request, like opening the page in a browser. If GitHub can't be reached, the check is skipped silently. To turn it off, run the script with `--no-update-check`.
 
 It can't see your router, your passwords, or your online accounts. If your router forwards a port to your node, the script can't tell. You should check your router's port forwarding page yourself.
 
@@ -54,7 +56,15 @@ Type your password if asked. The check takes about a minute, mostly while it dow
 
 ## Getting a Newer Version
 
-The first line of the report shows which version you ran, for example `AllStarLink node security check, version 1.6`. The newest version is listed at the top of this page. If yours is older, run Step 3 again, then Step 4.
+Starting with version 1.7, the script tells you itself. If a newer version is out, the top of the report says so, with the command to get it:
+
+```
+Newer version available: you're running 1.7; version 1.8 is out.
+```
+
+The summary at the end repeats the reminder. To update, run Step 3 again, then Step 4.
+
+If your copy is older than 1.7, it can't tell you. The first line of the report shows which version you ran, for example `AllStarLink node security check, version 1.6`. The newest version is listed at the top of this page.
 
 If you see a file named `asl-node-check.sh.1` (or `.2`, `.3`) in your home folder, an older download left it there. You can remove those extra copies:
 
@@ -109,6 +119,7 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
+- Version 1.7, October 30, 2026: Checks GitHub for a newer version of the script and says so at the top of the report and in the summary, with the command to update. Stays silent if GitHub can't be reached. Turn it off with `--no-update-check`. Renamed the script's internal version variable so it can't be overwritten by the operating system's own version information.
 - Version 1.6, October 29, 2026: Gives the right fix for automatic security updates. If the unattended-upgrades package is missing, it suggests only installing it, since on Debian that turns automatic updates on by itself. If the package is installed but switched off, it suggests dpkg-reconfigure. Tested on a second ASL3 node (Debian 13 on an x86 laptop).
 - Version 1.5, October 22, 2026: Clearer wording when the system hasn't asked for a restart but some programs still need one. Checks whether the Cockpit web console (port 9090) is exposed to the internet.
 - Version 1.4, October 22, 2026: When many services, or core parts of the system, are running old code, recommends one reboot instead of a long restart command. Never suggests restarting network services by hand, since that can drop your SSH session.
