@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 1.7 (October 30, 2026)
+# Version 1.8 (November 1, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -23,7 +23,7 @@
 
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
-SCRIPT_VERSION="1.7"
+SCRIPT_VERSION="1.8"
 REPO_RAW="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check/main"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
@@ -199,15 +199,17 @@ else
        "When convenient, run:" '$ sudo apt update && sudo apt upgrade'
 fi
 
-# On Debian, installing unattended-upgrades turns automatic updates on by itself
-# (its default answer is Yes). dpkg-reconfigure is only needed if someone once
-# answered No, so suggest it only when the package is installed but switched off.
+# Installing unattended-upgrades does NOT reliably switch it on: on fresh Debian 12
+# and 13 nodes the package installs but /etc/apt/apt.conf.d/20auto-upgrades is
+# never created. So when it's missing, give both commands at once.
 if pkg_installed unattended-upgrades && \
    apt-config dump 2>/dev/null | grep -q 'APT::Periodic::Unattended-Upgrade "1"'; then
   ok "Automatic security updates are turned on."
 elif ! pkg_installed unattended-upgrades; then
   warn "Automatic security updates are not turned on." \
-       "Run this command. Installing it turns automatic updates on:" '$ sudo apt install unattended-upgrades' \
+       "Run these two commands. The second one asks a question; answer Yes:" \
+       '$ sudo apt install unattended-upgrades' \
+       '$ sudo dpkg-reconfigure -plow unattended-upgrades' \
        "Then run this script again to confirm."
 else
   warn "Automatic security updates are installed but switched off." \
