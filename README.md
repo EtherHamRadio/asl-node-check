@@ -1,6 +1,6 @@
 # asl-node-check
 
-Version 1.7, October 30, 2026
+Version 1.8, November 1, 2026
 
 **For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
@@ -119,6 +119,7 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
+- Version 1.8, November 1, 2026: When automatic security updates aren't set up, gives both commands at once (install, then switch on), since installing the package alone doesn't always switch it on.
 - Version 1.7, October 30, 2026: Checks GitHub for a newer version of the script and says so at the top of the report and in the summary, with the command to update. Stays silent if GitHub can't be reached. Turn it off with `--no-update-check`. Renamed the script's internal version variable so it can't be overwritten by the operating system's own version information.
 - Version 1.6, October 29, 2026: Gives the right fix for automatic security updates. If the unattended-upgrades package is missing, it suggests only installing it, since on Debian that turns automatic updates on by itself. If the package is installed but switched off, it suggests dpkg-reconfigure. Tested on a second ASL3 node (Debian 13 on an x86 laptop).
 - Version 1.5, October 22, 2026: Clearer wording when the system hasn't asked for a restart but some programs still need one. Checks whether the Cockpit web console (port 9090) is exposed to the internet.
