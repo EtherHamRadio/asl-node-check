@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 1.9 (November 3, 2026)
+# Version 1.10 (November 3, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -30,7 +30,7 @@
 
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
-SCRIPT_VERSION="1.9"
+SCRIPT_VERSION="1.10"
 REPO_BASE="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check"
 REPO_RAW="$REPO_BASE/main"
 # The update script comes from this release's own tag (1.9, 1.10, ...), so it
@@ -46,7 +46,7 @@ UPDATE_RAW="$REPO_BASE/$UPDATE_REF"
 # runs the update script only if it matches exactly. Update this whenever
 # asl-node-update.sh changes:  sha256sum asl-node-update.sh
 UPDATE_SCRIPT="asl-node-update.sh"
-UPDATE_SHA256="ddfa5d2deea1cb0f74524a26748144f3b13136c473ae002e08d24e60e5a6d248"
+UPDATE_SHA256="64e9e59bb8067286a520b59339a87313a7f97cf897cb1379807bf4ce6add37b1"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -113,6 +113,12 @@ svc_started_at() {
   [ -n "$ts" ] && date -d "$ts" +%s 2>/dev/null || echo 0
 }
 svc_active() { systemctl is-active --quiet "$1" 2>/dev/null; }
+# Packages a regular upgrade would keep back, space-separated (practice run, changes nothing)
+held_back_pkgs() {
+  LC_ALL=C apt-get -s --with-new-pkgs upgrade 2>/dev/null \
+    | awk '/have been kept back:/{f=1;next} f&&/^  /{printf "%s ", $0;next} f{f=0}' \
+    | tr -s ' ' | sed 's/^ //;s/ $//'
+}
 
 echo "${C_B}AllStarLink node security check, version $SCRIPT_VERSION${C_0}"
 echo "Run on $(date '+%Y-%m-%d %H:%M %Z'). This script doesn't change your node's settings."
@@ -216,20 +222,36 @@ fi
 
 UPGRADABLE=$(apt list --upgradable 2>/dev/null | grep -c 'upgradable from')
 SEC_UPGRADABLE=$(apt list --upgradable 2>/dev/null | grep 'upgradable from' | grep -c -- '-security')
+# Updates apt "keeps back": installing them would remove or replace another
+# package, which a regular upgrade never does. A practice run (-s) finds them.
+HELD=$(held_back_pkgs)
+N_HELD=0; [ -n "$HELD" ] && N_HELD=$(wc -w <<< "$HELD")
+INSTALLABLE=$(( UPGRADABLE - N_HELD )); [ "$INSTALLABLE" -lt 0 ] && INSTALLABLE=0
 if [ "$UPGRADABLE" -eq 0 ]; then
   if [ "$REFRESH" -eq 1 ] && is_root; then
     ok "All installed software is up to date."
   else
     info "No updates were waiting as of that list. Run:  sudo apt update   to check for newer ones."
   fi
-elif [ "$SEC_UPGRADABLE" -gt 0 ]; then
+elif [ "$INSTALLABLE" -gt 0 ] && [ "$SEC_UPGRADABLE" -gt 0 ]; then
   finding UPDATES_WAITING
-  bad "$UPGRADABLE update(s) waiting, including $SEC_UPGRADABLE security update(s)." \
+  bad "$INSTALLABLE update(s) waiting, including security updates." \
       "Install the updates, then run this script again. It will tell you whether anything needs restarting:" '$ sudo apt update && sudo apt upgrade' '$ sudo bash asl-node-check.sh'
-else
+elif [ "$INSTALLABLE" -gt 0 ]; then
   finding UPDATES_WAITING
-  warn "$UPGRADABLE update(s) waiting (none marked as security updates)." \
+  warn "$INSTALLABLE update(s) waiting (none marked as security updates)." \
        "When convenient, run:" '$ sudo apt update && sudo apt upgrade'
+fi
+if [ "$N_HELD" -gt 0 ]; then
+  held_msg="$N_HELD update(s) held back by apt: $HELD."
+  held_todo=("Installing these replaces or removes another package, so a regular upgrade skips them. Usually it's an old library being swapped for a newer one." \
+             "Run this, then read the list under \"will be REMOVED\" before answering. If anything there looks important, answer n and ask for help:" \
+             '$ sudo apt full-upgrade')
+  if [ "$INSTALLABLE" -eq 0 ] && [ "$SEC_UPGRADABLE" -gt 0 ]; then
+    bad "$held_msg" "${held_todo[@]}"
+  else
+    warn "$held_msg" "${held_todo[@]}"
+  fi
 fi
 
 # Installing unattended-upgrades does NOT reliably switch it on: on fresh Debian 12

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # asl-node-update.sh — optional companion to asl-node-check.sh for AllStarLink 3 nodes
 #
-# Version 0.2 (November 3, 2026)
+# Version 0.3 (November 3, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -17,7 +17,7 @@
 # Run it with:  sudo bash asl-node-update.sh
 # Just see the plan, change nothing:  sudo bash asl-node-update.sh --dry-run
 
-UPDATE_VERSION="0.2"
+UPDATE_VERSION="0.3"
 FINDINGS_DIR="/var/lib/asl-node-check"
 FINDINGS_FILE="$FINDINGS_DIR/findings"
 FINDINGS_FORMAT=1
@@ -135,6 +135,18 @@ auto_updates_on() {
   pkg_installed unattended-upgrades && apt-config dump 2>/dev/null | grep -q 'APT::Periodic::Unattended-Upgrade "1"'
 }
 updates_waiting() { apt list --upgradable 2>/dev/null | grep -c 'upgradable from'; }
+# Packages a regular upgrade would keep back, space-separated (practice run, changes nothing)
+held_back_pkgs() {
+  LC_ALL=C apt-get -s --with-new-pkgs upgrade 2>/dev/null \
+    | awk '/have been kept back:/{f=1;next} f&&/^  /{printf "%s ", $0;next} f{f=0}' \
+    | tr -s ' ' | sed 's/^ //;s/ $//'
+}
+held_note() {
+  [ -n "$1" ] || return 0
+  echo "  ${C_INFO}[info]${C_0} Held back by apt: $1"
+  echo "         Installing these replaces or removes another package, so this script leaves"
+  echo "         them to you. Run the check again; it explains how to install them."
+}
 
 # Fills SAFE (plain services), ASTERISK_OLD, CORE_OLD, NET_COUNT
 scan_old_code() {
@@ -203,9 +215,15 @@ if has UPDATES_WAITING; then
     echo "  Downloading the latest list of updates..."
     apt-get update -qq >/dev/null 2>&1 || echo "  ${C_WARN}Couldn't refresh the update list; using the last one.${C_0}"
   fi
-  N=$(updates_waiting)
-  if [ "$N" -eq 0 ]; then
+  TOTAL_WAITING=$(updates_waiting)
+  HELD=$(held_back_pkgs)
+  N_HELD=0; [ -n "$HELD" ] && N_HELD=$(wc -w <<< "$HELD")
+  N=$(( TOTAL_WAITING - N_HELD )); [ "$N" -lt 0 ] && N=0
+  if [ "$TOTAL_WAITING" -eq 0 ]; then
     skip "No updates are waiting anymore. Nothing to do."
+  elif [ "$N" -eq 0 ]; then
+    skip "The only waiting updates are ones apt holds back."
+    held_note "$HELD"
   else
     echo "  $N update(s) are waiting. This installs them and keeps your current settings files"
     echo "  whenever an update offers a newer one. It runs:"
@@ -214,12 +232,16 @@ if has UPDATES_WAITING; then
     if ask "Install the $N waiting update(s)?"; then
       if DEBIAN_FRONTEND=noninteractive apt-get -y --with-new-pkgs upgrade \
            -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold; then
-        done_ "Installed $N update(s)."
+        LEFT=$(updates_waiting)
+        DONE_N=$(( TOTAL_WAITING - LEFT )); [ "$DONE_N" -lt 0 ] && DONE_N=0
+        done_ "Installed $DONE_N update(s)."
+        held_note "$(held_back_pkgs)"
       else
         fail "The update didn't finish cleanly. Scroll up for the message, or run the check again."
       fi
     else
       skip "Left the waiting updates for later."
+      held_note "$HELD"
     fi
   fi
 fi
