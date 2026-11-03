@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 1.8 (November 1, 2026)
+# Version 1.9 (November 3, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -16,6 +16,11 @@
 # thing it touches is the list of available updates (it runs "apt-get update"
 # so its answers are current). Skip that with:  sudo bash asl-node-check.sh --no-refresh
 #
+# Optional: at the end it asks whether to save what it found (the answer is no
+# unless you type y). If you say yes, it writes one small file,
+# /var/lib/asl-node-check/findings, that the separate asl-node-fix.sh script can
+# use to offer fixes. The file holds short codes, never commands.
+#
 # Run it with:  sudo bash asl-node-check.sh
 #
 # The report does not print passwords, IP addresses, or MAC addresses, so it's
@@ -23,7 +28,7 @@
 
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
-SCRIPT_VERSION="1.8"
+SCRIPT_VERSION="1.9"
 REPO_RAW="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check/main"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
@@ -69,6 +74,14 @@ warn() { echo "  ${C_WARN}[WARN]${C_0} $1"; shift; [ "$#" -gt 0 ] && todo "$@"; 
 bad()  { echo "  ${C_BAD}[FIX ]${C_0} $1"; shift; [ "$#" -gt 0 ] && todo "$@"; N_BAD=$((N_BAD+1)); }
 info() { echo "  ${C_INFO}[info]${C_0} $1"; }
 section() { echo; echo "${C_B}$1${C_0}"; }
+
+# Findings that asl-node-fix.sh knows how to fix. Each is a short code, never a
+# command. Saved only if the user says yes at the end of the report.
+FINDINGS_DIR="/var/lib/asl-node-check"
+FINDINGS_FILE="$FINDINGS_DIR/findings"
+FINDINGS_FORMAT=1
+FINDINGS=()
+finding() { [[ " ${FINDINGS[*]} " == *" $1 "* ]] || FINDINGS+=("$1"); }
 
 is_root() { [ "$(id -u)" -eq 0 ]; }
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -164,6 +177,7 @@ esac
 
 if [ -f /var/run/reboot-required ]; then
   warn "The system says a restart is needed to finish an earlier update." "Restart the node at a quiet moment:" '$ sudo reboot'
+  finding REBOOT_NEEDED
 else
   ok "The system hasn't asked for a restart. (Section 2 checks whether any programs still need one.)"
 fi
@@ -192,9 +206,11 @@ if [ "$UPGRADABLE" -eq 0 ]; then
     info "No updates were waiting as of that list. Run:  sudo apt update   to check for newer ones."
   fi
 elif [ "$SEC_UPGRADABLE" -gt 0 ]; then
+  finding UPDATES_WAITING
   bad "$UPGRADABLE update(s) waiting, including $SEC_UPGRADABLE security update(s)." \
       "Install the updates, then run this script again. It will tell you whether anything needs restarting:" '$ sudo apt update && sudo apt upgrade' '$ sudo bash asl-node-check.sh'
 else
+  finding UPDATES_WAITING
   warn "$UPGRADABLE update(s) waiting (none marked as security updates)." \
        "When convenient, run:" '$ sudo apt update && sudo apt upgrade'
 fi
@@ -206,12 +222,14 @@ if pkg_installed unattended-upgrades && \
    apt-config dump 2>/dev/null | grep -q 'APT::Periodic::Unattended-Upgrade "1"'; then
   ok "Automatic security updates are turned on."
 elif ! pkg_installed unattended-upgrades; then
+  finding AUTO_UPDATES_OFF
   warn "Automatic security updates are not turned on." \
        "Run these two commands. The second one asks a question; answer Yes:" \
        '$ sudo apt install unattended-upgrades' \
        '$ sudo dpkg-reconfigure -plow unattended-upgrades' \
        "Then run this script again to confirm."
 else
+  finding AUTO_UPDATES_OFF
   warn "Automatic security updates are installed but switched off." \
        "Run this command, and answer Yes when asked:" '$ sudo dpkg-reconfigure -plow unattended-upgrades' \
        "Then run this script again to confirm."
@@ -247,16 +265,19 @@ else
     ok "No running programs are using old code from before an update."
   elif [ "$TOTAL" -gt 6 ] || { [ "$CORE_OLD" -eq 1 ] && [ "$TOTAL" -gt 2 ]; }; then
     # Many things, or the core system plus several services: one reboot is simpler and safer
+    finding REBOOT_NEEDED
     warn "Many services ($TOTAL), including core parts of the system, are still running old code from earlier updates." \
          "The simplest fix is to restart the node at a quiet moment. It's offline for about a minute, and connected stations drop:" \
          '$ sudo reboot'
   else
     if [ "${#SAFE[@]}" -gt 0 ]; then
+      finding SERVICES_OLD_CODE
       warn "Some services are still running old code from before an update: ${SAFE[*]}." \
            "Restart them with this command. No reboot needed, and it doesn't affect your node's connections:" \
            "\$ sudo systemctl restart ${SAFE[*]}"
     fi
     if [ "$ASTERISK_OLD" -eq 1 ]; then
+      finding ASTERISK_OLD_CODE
       warn "Asterisk (the node itself) is still running old code from before an update." \
            "Restarting it briefly drops every connected station, so pick a quiet moment:" \
            '$ sudo systemctl restart asterisk'
@@ -304,6 +325,7 @@ else
     elif [ -r "$cl" ] && zgrep -q "$PHP_CVE" "$cl" 2>/dev/null; then
       ok "PHP $branch ($up) includes the PHP2Shell fix (confirmed in its changelog)."
     elif [ -n "$fixed" ]; then
+      finding UPDATES_WAITING
       bad "PHP $branch is version $up. The PHP2Shell fix arrived in $fixed." \
           "Install the updates, then run this script again. It will tell you whether anything needs restarting:" '$ sudo apt update && sudo apt upgrade' '$ sudo bash asl-node-check.sh'
     else
@@ -320,6 +342,7 @@ else
       esac
       started=$(svc_started_at "$svc"); changed=$(pkg_changed_at "$srcpkg")
       if [ "$started" -gt 0 ] && [ "$changed" -gt "$started" ]; then
+        finding PHP_SERVICE_STALE
         bad "$svc has been running since before PHP was last updated, so it may still be using the old code." \
             "Restart it. This doesn't affect your node's connections:" "\$ sudo systemctl restart $svc"
       else
@@ -469,4 +492,35 @@ echo "  Reminder: this script can't see your router, your passwords, or your acc
 if [ -n "$NEWER_VERSION" ]; then
   echo "  This report came from version $SCRIPT_VERSION. Version $NEWER_VERSION is available; see the top of the report."
 fi
+
+# ---------- Optional: save findings for asl-node-fix.sh ----------
+# Asks only when there's something the fix script can fix, the check ran as root,
+# and someone is at the keyboard. Any answer other than y means no.
+if [ "${#FINDINGS[@]}" -gt 0 ] && is_root && [ -t 0 ] && [ -t 1 ]; then
+  echo
+  echo "${C_B}Optional:${C_0} the fix script (asl-node-fix.sh) can take care of ${#FINDINGS[@]} of these for you."
+  echo "It shows each fix and asks before doing anything."
+  read -r -p "Save these findings so the fix script can use them? [y/N] " ANSWER
+  if [[ "$ANSWER" =~ ^[Yy]$ ]]; then
+    umask 077
+    if mkdir -p "$FINDINGS_DIR" && chmod 700 "$FINDINGS_DIR" && {
+         echo "# asl-node-check findings. Codes only; asl-node-fix.sh re-checks each one before fixing."
+         echo "format=$FINDINGS_FORMAT"
+         echo "check_version=$SCRIPT_VERSION"
+         echo "saved=$(date +%s)"
+         printf '%s\n' "${FINDINGS[@]}"
+       } > "$FINDINGS_FILE.tmp" && mv -f "$FINDINGS_FILE.tmp" "$FINDINGS_FILE"; then
+      echo "  Saved to $FINDINGS_FILE (under 1 KB)."
+      echo "  To review and apply the fixes, run:"
+      echo "      sudo bash asl-node-fix.sh"
+      echo "  (Don't have it yet? Download it with:"
+      echo "      wget -O asl-node-fix.sh $REPO_RAW/asl-node-fix.sh  )"
+    else
+      echo "  Couldn't save the findings file. Nothing was changed."
+    fi
+  else
+    echo "  Not saved. Nothing was changed."
+  fi
+fi
+
 [ "$N_BAD" -gt 0 ] && exit 1 || exit 0
