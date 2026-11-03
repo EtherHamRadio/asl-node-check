@@ -549,10 +549,14 @@ if [ "${#FINDINGS[@]}" -gt 0 ] && is_root && [ -t 0 ] && [ -t 1 ]; then
     if [[ "$ANSWER" =~ ^[Yy]$ ]]; then
       TMP_DL=$(mktemp) || TMP_DL=""
       got=1
-      if [ -z "$TMP_DL" ]; then got=1
-      elif have wget; then wget -q -T 20 -t 2 -O "$TMP_DL" "$UPDATE_RAW/$UPDATE_SCRIPT" && got=0
-      elif have curl; then curl -fsS --max-time 30 -o "$TMP_DL" "$UPDATE_RAW/$UPDATE_SCRIPT" && got=0
-      fi
+      # Try this release's tag first, then main. The fingerprint decides what's accepted.
+      for src in "$UPDATE_RAW" "$REPO_RAW"; do
+        [ -n "$TMP_DL" ] || break
+        if have wget; then wget -q -T 20 -t 2 -O "$TMP_DL" "$src/$UPDATE_SCRIPT" && got=0
+        elif have curl; then curl -fsS --max-time 30 -o "$TMP_DL" "$src/$UPDATE_SCRIPT" 2>/dev/null && got=0
+        fi
+        [ "$got" -eq 0 ] && sha_ok "$TMP_DL" && break
+      done
       if [ "$got" -ne 0 ]; then
         echo "  Couldn't download it. Check the node's internet connection and try again later."
       elif ! sha_ok "$TMP_DL"; then
