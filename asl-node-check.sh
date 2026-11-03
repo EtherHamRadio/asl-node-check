@@ -16,10 +16,12 @@
 # thing it touches is the list of available updates (it runs "apt-get update"
 # so its answers are current). Skip that with:  sudo bash asl-node-check.sh --no-refresh
 #
-# Optional: at the end it asks whether to save what it found (the answer is no
-# unless you type y). If you say yes, it writes one small file,
-# /var/lib/asl-node-check/findings, that the separate asl-node-fix.sh script can
-# use to offer fixes. The file holds short codes, never commands.
+# Optional: if it finds waiting updates or services running old code, it offers
+# to download and run the separate update script, asl-node-update.sh. Each
+# question's answer is no unless you type y, and answering no changes nothing.
+# If you say yes, it saves one small file, /var/lib/asl-node-check/findings
+# (short codes, never commands), and runs the update script only if it matches
+# the fingerprint (SHA-256) built into this release.
 #
 # Run it with:  sudo bash asl-node-check.sh
 #
@@ -29,7 +31,16 @@
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
 SCRIPT_VERSION="1.9"
-REPO_RAW="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check/main"
+# For testing a branch before release:  sudo ASL_NODE_CHECK_REF=branch-name bash asl-node-check.sh
+REPO_REF="${ASL_NODE_CHECK_REF:-main}"
+[[ "$REPO_REF" =~ ^[A-Za-z0-9._-]+$ ]] || REPO_REF="main"
+REPO_RAW="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check/$REPO_REF"
+
+# Fingerprint of the asl-node-update.sh released with this version. The check
+# runs the update script only if it matches exactly. Update this whenever
+# asl-node-update.sh changes:  sha256sum asl-node-update.sh
+UPDATE_SCRIPT="asl-node-update.sh"
+UPDATE_SHA256="ddfa5d2deea1cb0f74524a26748144f3b13136c473ae002e08d24e60e5a6d248"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -75,7 +86,7 @@ bad()  { echo "  ${C_BAD}[FIX ]${C_0} $1"; shift; [ "$#" -gt 0 ] && todo "$@"; N
 info() { echo "  ${C_INFO}[info]${C_0} $1"; }
 section() { echo; echo "${C_B}$1${C_0}"; }
 
-# Findings that asl-node-fix.sh knows how to fix. Each is a short code, never a
+# Findings that asl-node-update.sh knows how to handle. Each is a short code, never a
 # command. Saved only if the user says yes at the end of the report.
 FINDINGS_DIR="/var/lib/asl-node-check"
 FINDINGS_FILE="$FINDINGS_DIR/findings"
@@ -493,33 +504,88 @@ if [ -n "$NEWER_VERSION" ]; then
   echo "  This report came from version $SCRIPT_VERSION. Version $NEWER_VERSION is available; see the top of the report."
 fi
 
-# ---------- Optional: save findings for asl-node-fix.sh ----------
-# Asks only when there's something the fix script can fix, the check ran as root,
-# and someone is at the keyboard. Any answer other than y means no.
+# ---------- Optional: offer the update script ----------
+# Asks only when there's something the update script handles, the check ran as
+# root, and someone is at the keyboard. Any answer other than y means no.
+save_findings() {
+  umask 077
+  mkdir -p "$FINDINGS_DIR" && chmod 700 "$FINDINGS_DIR" && {
+    echo "# asl-node-check findings. Codes only; asl-node-update.sh re-checks each one first."
+    echo "format=$FINDINGS_FORMAT"
+    echo "check_version=$SCRIPT_VERSION"
+    echo "saved=$(date +%s)"
+    printf '%s\n' "${FINDINGS[@]}"
+  } > "$FINDINGS_FILE.tmp" && mv -f "$FINDINGS_FILE.tmp" "$FINDINGS_FILE"
+}
+sha_ok() { [ -f "$1" ] && [ "$(sha256sum "$1" 2>/dev/null | cut -d' ' -f1)" = "$UPDATE_SHA256" ]; }
+
 if [ "${#FINDINGS[@]}" -gt 0 ] && is_root && [ -t 0 ] && [ -t 1 ]; then
+  # The update script goes next to this one, owned by whoever ran sudo.
+  HERE=$(cd "$(dirname "$0")" 2>/dev/null && pwd) || HERE="$PWD"
+  LOCAL_UPDATE="$HERE/$UPDATE_SCRIPT"
   echo
-  echo "${C_B}Optional:${C_0} the fix script (asl-node-fix.sh) can take care of ${#FINDINGS[@]} of these for you."
-  echo "It shows each fix and asks before doing anything."
-  read -r -p "Save these findings so the fix script can use them? [y/N] " ANSWER
-  if [[ "$ANSWER" =~ ^[Yy]$ ]]; then
-    umask 077
-    if mkdir -p "$FINDINGS_DIR" && chmod 700 "$FINDINGS_DIR" && {
-         echo "# asl-node-check findings. Codes only; asl-node-fix.sh re-checks each one before fixing."
-         echo "format=$FINDINGS_FORMAT"
-         echo "check_version=$SCRIPT_VERSION"
-         echo "saved=$(date +%s)"
-         printf '%s\n' "${FINDINGS[@]}"
-       } > "$FINDINGS_FILE.tmp" && mv -f "$FINDINGS_FILE.tmp" "$FINDINGS_FILE"; then
-      echo "  Saved to $FINDINGS_FILE (under 1 KB)."
-      echo "  To review and apply the fixes, run:"
-      echo "      sudo bash asl-node-fix.sh"
-      echo "  (Don't have it yet? Download it with:"
-      echo "      wget -O asl-node-fix.sh $REPO_RAW/asl-node-fix.sh  )"
-    else
-      echo "  Couldn't save the findings file. Nothing was changed."
-    fi
+  echo "${C_B}Optional:${C_0} the update script ($UPDATE_SCRIPT) can take care of ${#FINDINGS[@]} of these for you."
+  echo "It installs waiting updates, turns on automatic security updates, and restarts"
+  echo "services that are still running old code. It shows each step and asks first."
+  echo "It never touches your firewall, SSH settings, or node settings."
+  READY=0; SAVED_NOW=0
+  if sha_ok "$LOCAL_UPDATE"; then
+    READY=1
   else
-    echo "  Not saved. Nothing was changed."
+    echo
+    if [ -e "$LOCAL_UPDATE" ]; then
+      echo "Your copy of $UPDATE_SCRIPT doesn't match this version of the check."
+      Q="Download the current update script? [y/N] "
+    else
+      Q="Download the update script? [y/N] "
+    fi
+    read -r -p "$Q" ANSWER
+    if [[ "$ANSWER" =~ ^[Yy]$ ]]; then
+      TMP_DL=$(mktemp) || TMP_DL=""
+      got=1
+      if [ -z "$TMP_DL" ]; then got=1
+      elif have wget; then wget -q -T 20 -t 2 -O "$TMP_DL" "$REPO_RAW/$UPDATE_SCRIPT" && got=0
+      elif have curl; then curl -fsS --max-time 30 -o "$TMP_DL" "$REPO_RAW/$UPDATE_SCRIPT" && got=0
+      fi
+      if [ "$got" -ne 0 ]; then
+        echo "  Couldn't download it. Check the node's internet connection and try again later."
+      elif ! sha_ok "$TMP_DL"; then
+        echo "  ${C_BAD}The download doesn't match this version's fingerprint, so it wasn't saved or run.${C_0}"
+        echo "  Get the current check first, then run it again:"
+        echo "      wget -O asl-node-check.sh $REPO_RAW/asl-node-check.sh"
+      elif install -m 644 "$TMP_DL" "$LOCAL_UPDATE"; then
+        [ -n "$SUDO_UID" ] && chown "$SUDO_UID:${SUDO_GID:-$SUDO_UID}" "$LOCAL_UPDATE" 2>/dev/null
+        echo "  Downloaded $UPDATE_SCRIPT ($(( $(stat -c %s "$LOCAL_UPDATE") / 1024 )) KB) to $HERE."
+        if save_findings; then READY=1; SAVED_NOW=1; else echo "  Couldn't save the findings file."; fi
+      else
+        echo "  Couldn't save the update script to $HERE."
+      fi
+      [ -n "$TMP_DL" ] && rm -f "$TMP_DL"
+    else
+      echo "  Not downloaded. Nothing was changed."
+    fi
+  fi
+
+  if [ "$READY" -eq 1 ]; then
+    read -r -p "Run it now? [y/N] " ANSWER
+    if [[ "$ANSWER" =~ ^[Yy]$ ]]; then
+      # Run a root-only copy, checked again, so it can't change between the check and the run.
+      if save_findings && RUN_COPY="$FINDINGS_DIR/$UPDATE_SCRIPT" \
+         && install -m 700 "$LOCAL_UPDATE" "$RUN_COPY" && sha_ok "$RUN_COPY"; then
+        echo
+        bash "$RUN_COPY"
+        exit $?
+      else
+        echo "  Couldn't prepare the update script. Nothing was changed."
+      fi
+    else
+      if [ "$SAVED_NOW" -eq 1 ]; then
+        echo "  Not run. Your findings are saved, so you can run it later with:"
+        echo "      sudo bash $LOCAL_UPDATE"
+      else
+        echo "  Not run. Nothing was changed. To use it later, run this check again and answer y."
+      fi
+    fi
   fi
 fi
 

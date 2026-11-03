@@ -1,6 +1,6 @@
 # asl-node-check
 
-Version 1.9, November 3, 2026 (fix script: version 0.1)
+Version 1.9, November 3, 2026 (update script: version 0.2)
 
 **For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
@@ -18,7 +18,7 @@ It was written in response to the October 2026 "PHP2Shell" flaws (CVE-2026-10961
 
 ## What It Doesn't Do
 
-It doesn't install, remove, or change anything on your node. The only thing it updates is the list of available updates (it runs `apt-get update`), so its answers are current. At the end, it can save a short list of what it found, but only if you say yes (see [Fixing What It Found](#fixing-what-it-found-optional)).
+It doesn't install, remove, or change anything on your node. The only thing it updates is the list of available updates (it runs `apt-get update`), so its answers are current. At the end, it can offer to download and run a separate update script, but only if you say yes (see [Installing Updates for You](#installing-updates-for-you-optional)).
 
 It also checks GitHub for a newer version of itself by reading the small `VERSION` file in this repository. Nothing about your node is sent; it's an ordinary web request, like opening the page in a browser. If GitHub can't be reached, the check is skipped silently. To turn it off, run the script with `--no-update-check`.
 
@@ -72,53 +72,48 @@ If you see a file named `asl-node-check.sh.1` (or `.2`, `.3`) in your home folde
 rm asl-node-check.sh.[0-9]*
 ```
 
-## Fixing What It Found (Optional)
+## Installing Updates for You (Optional)
 
-The check only reports. If you'd like help making the fixes, a second script, `asl-node-fix.sh`, can take care of the most common ones for you. Using it is entirely up to you.
+The check only reports. If you'd like help with the updates it finds, a second script, `asl-node-update.sh`, can take care of them for you. Using it is entirely up to you.
 
-**Step 1. Save the findings.** When the check finds something the fix script can handle, it asks at the end:
-
-```
-Save these findings so the fix script can use them? [y/N]
-```
-
-The answer is no unless you type `y`. Pressing Enter saves nothing.
-
-**Step 2. Download the fix script:**
+When the check finds waiting updates, automatic security updates switched off, or services still running old code, it describes the update script at the end of the report and asks:
 
 ```
-wget -O asl-node-fix.sh https://raw.githubusercontent.com/EtherHamRadio/asl-node-check/main/asl-node-fix.sh
+Download the update script? [y/N]
+Run it now? [y/N]
 ```
 
-**Step 3. Run it:**
+Each answer is no unless you type `y`. Pressing Enter at either question means no, and if you answer no to everything, nothing on your node changes. If the update script is already in the same folder as the check, the check skips the download question.
+
+The update script checks each item again to make sure it still applies, shows you exactly what it will run, and asks before each step. When it's done, run the check again to confirm:
 
 ```
-sudo bash asl-node-fix.sh
+sudo bash asl-node-check.sh
 ```
 
-It checks each saved finding again to make sure it still applies, shows you exactly what it will run, and asks before each fix. Again, the answer is no unless you type `y`. To see the plan without changing anything, run it with `--dry-run`:
+**What it can do:**
 
-```
-sudo bash asl-node-fix.sh --dry-run
-```
-
-When it's done, run the check again (`sudo bash asl-node-check.sh`) to confirm.
-
-**What it can fix:**
-
-- Installs waiting updates, keeping your current settings files whenever an update offers a newer one.
-- Turns on automatic security updates.
-- Restarts services still running old code from before an update.
-- Restarts Asterisk, after warning you that this briefly drops connected stations.
-- Restarts the node when one restart is the better fix. This is always the last step, and it warns you first that your SSH session will end.
+- Install waiting updates, keeping your current settings files whenever an update offers a newer one.
+- Turn on automatic security updates.
+- Restart services still running old code from before an update.
+- Restart Asterisk, after warning you that this briefly drops connected stations.
+- Restart the node when one restart is the better choice. This is always the last step, and it warns you first that your SSH session will end.
 
 **What it never touches:** firewall rules, SSH settings, passwords, your router, network services, or your node's settings in `/etc/asterisk`. Those items in the report stay yours to handle.
 
-### About the Saved File
+**Making sure it's the right script.** Each release of the check carries the fingerprint (SHA-256 checksum) of the update script released with it. The check won't run an update script that doesn't match exactly, whether it was damaged in the download or changed afterward.
 
-The findings are saved in one small file, `/var/lib/asl-node-check/findings`, in a folder only root can read. The file holds short codes such as `UPDATES_WAITING`, never commands, and the fix script refuses to use it unless root owns it and no other user can change it. The fix script also keeps a short log of what it did in the same folder, `fix.log`.
+**Running it yourself.** If you said yes to the download but no to running it, the check tells you the command to run it later. To see what it would do without changing anything, add `--dry-run`:
 
-These files are tiny. The findings file is a few hundred bytes, the log grows by a line or two per fix, and the two scripts are about 25 KB and 15 KB. Even on a small SD card in a Raspberry Pi, they won't affect your node's storage.
+```
+sudo bash asl-node-update.sh --dry-run
+```
+
+### About the Saved Files
+
+When you say yes, the check saves a list of what it found in `/var/lib/asl-node-check/findings`, in a folder only root can read. The list holds short codes such as `UPDATES_WAITING`, never commands, and the update script refuses to use it unless root owns it and no other user can change it. The same folder holds the copy of the update script the check runs, plus a short log of what it did, `update.log`.
+
+These files are tiny. The list is a few hundred bytes, the log grows by a line or two per step, and the two scripts are about 28 KB and 14 KB. Even on a small SD card in a Raspberry Pi, they won't affect your node's storage.
 
 To remove the saved files at any time:
 
@@ -173,7 +168,7 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
-- Version 1.9, November 3, 2026: At the end of the report, offers to save what it found so the new fix script can use it. The default is no. Added `asl-node-fix.sh` version 0.1, which re-checks each saved finding and asks before each fix.
+- Version 1.9, November 3, 2026: At the end of the report, offers to download and run the new update script, `asl-node-update.sh` (version 0.2), and runs it only if it matches the fingerprint built into the check. Each answer is no unless you type y. The update script re-checks each item and asks before each step.
 - Version 1.8, November 1, 2026: When automatic security updates aren't set up, gives both commands at once (install, then switch on), since installing the package alone doesn't always switch it on.
 - Version 1.7, October 30, 2026: Checks GitHub for a newer version of the script and says so at the top of the report and in the summary, with the command to update. Stays silent if GitHub can't be reached. Turn it off with `--no-update-check`. Renamed the script's internal version variable so it can't be overwritten by the operating system's own version information.
 - Version 1.6, October 29, 2026: Gives the right fix for automatic security updates. If the unattended-upgrades package is missing, it suggests only installing it, since on Debian that turns automatic updates on by itself. If the package is installed but switched off, it suggests dpkg-reconfigure. Tested on a second ASL3 node (Debian 13 on an x86 laptop).

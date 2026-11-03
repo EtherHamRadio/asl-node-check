@@ -1,37 +1,37 @@
 #!/usr/bin/env bash
-# asl-node-fix.sh — optional companion to asl-node-check.sh for AllStarLink 3 nodes
+# asl-node-update.sh — optional companion to asl-node-check.sh for AllStarLink 3 nodes
 #
-# Version 0.1 (November 3, 2026)
+# Version 0.2 (November 3, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
 # What it does: reads the findings that asl-node-check.sh saved (only if you said
 # yes when it asked), checks each one again to make sure it still applies, then
-# shows you each fix and asks before doing it. Any answer other than y means no.
+# shows you each step and asks before doing it. Any answer other than y means no.
 #
-# What it fixes: waiting updates, automatic security updates, services still
+# What it handles: waiting updates, automatic security updates, services still
 # running old code, and a restart when one is needed.
 # What it never touches: firewall rules, SSH settings, passwords, your router,
 # or your node's own settings in /etc/asterisk. Those stay advice only.
 #
-# Run it with:  sudo bash asl-node-fix.sh
-# Just see the plan, change nothing:  sudo bash asl-node-fix.sh --dry-run
+# Run it with:  sudo bash asl-node-update.sh
+# Just see the plan, change nothing:  sudo bash asl-node-update.sh --dry-run
 
-FIX_VERSION="0.1"
+UPDATE_VERSION="0.2"
 FINDINGS_DIR="/var/lib/asl-node-check"
 FINDINGS_FILE="$FINDINGS_DIR/findings"
 FINDINGS_FORMAT=1
-LOG_FILE="$FINDINGS_DIR/fix.log"
+LOG_FILE="$FINDINGS_DIR/update.log"
 KNOWN_CODES="UPDATES_WAITING AUTO_UPDATES_OFF SERVICES_OLD_CODE PHP_SERVICE_STALE ASTERISK_OLD_CODE REBOOT_NEEDED"
 
 DRY_RUN=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;
-    --version) echo "asl-node-fix $FIX_VERSION"; exit 0 ;;
+    --version) echo "asl-node-update $UPDATE_VERSION"; exit 0 ;;
     -h|--help)
-      echo "Usage: sudo bash asl-node-fix.sh [--dry-run]"
-      echo "  --dry-run   show what would be fixed, change nothing"
+      echo "Usage: sudo bash asl-node-update.sh [--dry-run]"
+      echo "  --dry-run   show what it would do, change nothing"
       exit 0 ;;
     *) echo "Unknown option: $arg (try --help)"; exit 2 ;;
   esac
@@ -67,12 +67,12 @@ ask() {
 # show the exact command, then (unless dry run) run it
 show_cmd() { echo "      $*"; }
 
-echo "${C_B}AllStarLink node fix script, version $FIX_VERSION${C_0}"
+echo "${C_B}AllStarLink node update script, version $UPDATE_VERSION${C_0}"
 [ "$DRY_RUN" -eq 1 ] && echo "Dry run: this shows the plan and changes nothing."
 
 # ---------- Safety checks before anything else ----------
 if [ "$(id -u)" -ne 0 ]; then
-  echo "This script needs root to make fixes. Run it with:  sudo bash $0"
+  echo "This script needs root to install updates. Run it with:  sudo bash $0"
   exit 1
 fi
 if ! have dpkg || ! { pkg_installed asl3 || pkg_installed asl3-asterisk; }; then
@@ -80,7 +80,7 @@ if ! have dpkg || ! { pkg_installed asl3 || pkg_installed asl3-asterisk; }; then
   exit 1
 fi
 if [ "$DRY_RUN" -eq 0 ] && ! [ -t 0 ]; then
-  echo "This script asks before each fix, so it needs someone at the keyboard."
+  echo "This script asks before each step, so it needs someone at the keyboard."
   echo "Run it directly in your SSH session, not from a pipe or a scheduled job. Nothing was changed."
   exit 1
 fi
@@ -125,10 +125,10 @@ echo
 echo "Using findings saved by asl-node-check $CHECK_VER, $AGE_DAYS day(s) ago."
 [ "$AGE_DAYS" -gt 7 ] && echo "${C_WARN}They're more than a week old.${C_0} Each one is checked again below, but running the check again first is a good idea."
 if [ "${#CODES[@]}" -eq 0 ]; then
-  echo "Nothing in the saved findings is something this script fixes. Nothing was changed."
+  echo "Nothing in the saved findings is something this script handles. Nothing was changed."
   exit 0
 fi
-log "run started (fix $FIX_VERSION, findings from check $CHECK_VER: ${CODES[*]})"
+log "run started (update $UPDATE_VERSION, findings from check $CHECK_VER: ${CODES[*]})"
 
 # ---------- Re-check helpers (the same tests the check script uses) ----------
 auto_updates_on() {
@@ -178,7 +178,7 @@ if has AUTO_UPDATES_OFF; then
   if auto_updates_on; then
     skip "Automatic security updates are already on. Nothing to do."
   else
-    echo "  Automatic security updates are off. This fix installs unattended-upgrades (if needed)"
+    echo "  Automatic security updates are off. This step installs unattended-upgrades (if needed)"
     echo "  and switches it on, the same as answering Yes in dpkg-reconfigure. It runs:"
     pkg_installed unattended-upgrades || show_cmd "apt-get install -y unattended-upgrades"
     show_cmd "write /etc/apt/apt.conf.d/20auto-upgrades (the old one is kept as a .bak copy)"
@@ -297,7 +297,7 @@ fi
 # ---------- Wrap-up ----------
 echo
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "Dry run finished. Nothing was changed. To make the fixes, run:  sudo bash asl-node-fix.sh"
+  echo "Dry run finished. Nothing was changed. To make the changes, run:  sudo bash asl-node-update.sh"
 else
   log "run finished"
   echo "Finished. A log of what was done is in $LOG_FILE."
