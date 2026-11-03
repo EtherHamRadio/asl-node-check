@@ -31,10 +31,16 @@
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
 SCRIPT_VERSION="1.9"
+REPO_BASE="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check"
+REPO_RAW="$REPO_BASE/main"
+# The update script comes from this release's own tag (v1.9, v1.10, ...), so it
+# always matches the fingerprint below, even right after a new release or when
+# someone runs an older check. Release checklist: merge to main, then tag the
+# merge commit "v$SCRIPT_VERSION" and push the tag.
 # For testing a branch before release:  sudo ASL_NODE_CHECK_REF=branch-name bash asl-node-check.sh
-REPO_REF="${ASL_NODE_CHECK_REF:-main}"
-[[ "$REPO_REF" =~ ^[A-Za-z0-9._-]+$ ]] || REPO_REF="main"
-REPO_RAW="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check/$REPO_REF"
+UPDATE_REF="${ASL_NODE_CHECK_REF:-v$SCRIPT_VERSION}"
+[[ "$UPDATE_REF" =~ ^[A-Za-z0-9._-]+$ ]] || UPDATE_REF="v$SCRIPT_VERSION"
+UPDATE_RAW="$REPO_BASE/$UPDATE_REF"
 
 # Fingerprint of the asl-node-update.sh released with this version. The check
 # runs the update script only if it matches exactly. Update this whenever
@@ -544,15 +550,15 @@ if [ "${#FINDINGS[@]}" -gt 0 ] && is_root && [ -t 0 ] && [ -t 1 ]; then
       TMP_DL=$(mktemp) || TMP_DL=""
       got=1
       if [ -z "$TMP_DL" ]; then got=1
-      elif have wget; then wget -q -T 20 -t 2 -O "$TMP_DL" "$REPO_RAW/$UPDATE_SCRIPT" && got=0
-      elif have curl; then curl -fsS --max-time 30 -o "$TMP_DL" "$REPO_RAW/$UPDATE_SCRIPT" && got=0
+      elif have wget; then wget -q -T 20 -t 2 -O "$TMP_DL" "$UPDATE_RAW/$UPDATE_SCRIPT" && got=0
+      elif have curl; then curl -fsS --max-time 30 -o "$TMP_DL" "$UPDATE_RAW/$UPDATE_SCRIPT" && got=0
       fi
       if [ "$got" -ne 0 ]; then
         echo "  Couldn't download it. Check the node's internet connection and try again later."
       elif ! sha_ok "$TMP_DL"; then
         echo "  ${C_BAD}The download doesn't match this version's fingerprint, so it wasn't saved or run.${C_0}"
-        echo "  Get the current check first, then run it again:"
-        echo "      wget -O asl-node-check.sh $REPO_RAW/asl-node-check.sh"
+        echo "  Try again later. If it keeps happening, please report it at"
+        echo "  https://github.com/EtherHamRadio/asl-node-check/issues"
       elif install -m 644 "$TMP_DL" "$LOCAL_UPDATE"; then
         [ -n "$SUDO_UID" ] && chown "$SUDO_UID:${SUDO_GID:-$SUDO_UID}" "$LOCAL_UPDATE" 2>/dev/null
         echo "  Downloaded $UPDATE_SCRIPT ($(( $(stat -c %s "$LOCAL_UPDATE") / 1024 )) KB) to $HERE."

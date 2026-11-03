@@ -101,7 +101,7 @@ sudo bash asl-node-check.sh
 
 **What it never touches:** firewall rules, SSH settings, passwords, your router, network services, or your node's settings in `/etc/asterisk`. Those items in the report stay yours to handle.
 
-**Making sure it's the right script.** Each release of the check carries the fingerprint (SHA-256 checksum) of the update script released with it. The check won't run an update script that doesn't match exactly, whether it was damaged in the download or changed afterward.
+**Making sure it's the right script.** Each release of the check carries the fingerprint (SHA-256 checksum) of the update script released with it. The check downloads the update script from that same release on GitHub, so the two always match, and it won't run an update script that doesn't match exactly, whether it was damaged in the download or changed afterward.
 
 **Running it yourself.** If you said yes to the download but no to running it, the check tells you the command to run it later. To see what it would do without changing anything, add `--dry-run`:
 
