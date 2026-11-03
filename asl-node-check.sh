@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 1.10 (November 3, 2026)
+# Version 2.0 (November 3, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -30,10 +30,10 @@
 
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
-SCRIPT_VERSION="1.10"
+SCRIPT_VERSION="2.0"
 REPO_BASE="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check"
 REPO_RAW="$REPO_BASE/main"
-# The update script comes from this release's own tag (1.9, 1.10, ...), so it
+# The update script comes from this release's own tag (2.0, 2.1, ...), so it
 # always matches the fingerprint below, even right after a new release or when
 # someone runs an older check. Release checklist: merge to main, then tag the
 # merge commit "$SCRIPT_VERSION" (no leading v) and push the tag.

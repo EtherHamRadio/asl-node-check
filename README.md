@@ -1,6 +1,6 @@
 # asl-node-check
 
-Version 1.10, November 3, 2026 (update script: version 0.3)
+Version 2.0, November 3, 2026 (update script: version 0.3)
 
 **For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
@@ -170,7 +170,7 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
-- Version 1.10, November 3, 2026: Tells apart updates a regular upgrade can install from ones apt holds back because they'd remove or replace another package. Held-back updates get their own line and the `sudo apt full-upgrade` command, and no longer trigger the update script. Update script 0.3 reports how many updates it actually installed and names any that were held back.
+- Version 2.0, November 3, 2026: Tells apart updates a regular upgrade can install from ones apt holds back because they'd remove or replace another package. Held-back updates get their own line and the `sudo apt full-upgrade` command, and no longer trigger the update script. Update script 0.3 reports how many updates it actually installed and names any that were held back.
 - Version 1.9, November 3, 2026: At the end of the report, offers to download and run the new update script, `asl-node-update.sh` (version 0.2), and runs it only if it matches the fingerprint built into the check. Each answer is no unless you type y. The update script re-checks each item and asks before each step.
 - Version 1.8, November 1, 2026: When automatic security updates aren't set up, gives both commands at once (install, then switch on), since installing the package alone doesn't always switch it on.
 - Version 1.7, October 30, 2026: Checks GitHub for a newer version of the script and says so at the top of the report and in the summary, with the command to update. Stays silent if GitHub can't be reached. Turn it off with `--no-update-check`. Renamed the script's internal version variable so it can't be overwritten by the operating system's own version information.
