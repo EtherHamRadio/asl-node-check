@@ -33,13 +33,13 @@
 SCRIPT_VERSION="1.9"
 REPO_BASE="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check"
 REPO_RAW="$REPO_BASE/main"
-# The update script comes from this release's own tag (v1.9, v1.10, ...), so it
+# The update script comes from this release's own tag (1.9, 1.10, ...), so it
 # always matches the fingerprint below, even right after a new release or when
 # someone runs an older check. Release checklist: merge to main, then tag the
-# merge commit "v$SCRIPT_VERSION" and push the tag.
+# merge commit "$SCRIPT_VERSION" (no leading v) and push the tag.
 # For testing a branch before release:  sudo ASL_NODE_CHECK_REF=branch-name bash asl-node-check.sh
-UPDATE_REF="${ASL_NODE_CHECK_REF:-v$SCRIPT_VERSION}"
-[[ "$UPDATE_REF" =~ ^[A-Za-z0-9._-]+$ ]] || UPDATE_REF="v$SCRIPT_VERSION"
+UPDATE_REF="${ASL_NODE_CHECK_REF:-$SCRIPT_VERSION}"
+[[ "$UPDATE_REF" =~ ^[A-Za-z0-9._-]+$ ]] || UPDATE_REF="$SCRIPT_VERSION"
 UPDATE_RAW="$REPO_BASE/$UPDATE_REF"
 
 # Fingerprint of the asl-node-update.sh released with this version. The check
