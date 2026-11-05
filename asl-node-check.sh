@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 2.0 (November 3, 2026)
+# Version 2.1 (November 5, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -12,9 +12,10 @@
 # "PHP2Shell" fix), services still running old code, end-of-life systems,
 # and a few common settings worth a second look.
 #
-# What it does NOT do: it doesn't install, remove, or change anything. The only
-# thing it touches is the list of available updates (it runs "apt-get update"
-# so its answers are current). Skip that with:  sudo bash asl-node-check.sh --no-refresh
+# What it does NOT do: on its own, it doesn't install, remove, or change anything.
+# The only thing it touches is the list of available updates (it runs "apt-get
+# update" so its answers are current; skip that with --no-refresh). Changes happen
+# only if you say yes to the optional update script at the end.
 #
 # Optional: if it finds waiting updates or services running old code, it offers
 # to download and run the separate update script, asl-node-update.sh. Each
@@ -30,7 +31,7 @@
 
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
-SCRIPT_VERSION="2.0"
+SCRIPT_VERSION="2.1"
 REPO_BASE="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check"
 REPO_RAW="$REPO_BASE/main"
 # The update script comes from this release's own tag (2.0, 2.1, ...), so it
@@ -101,6 +102,19 @@ FINDINGS=()
 finding() { [[ " ${FINDINGS[*]} " == *" $1 "* ]] || FINDINGS+=("$1"); }
 
 is_root() { [ "$(id -u)" -eq 0 ]; }
+# The update script is offered at the end only when running as root with someone
+# at the keyboard. Only then do the "What to do" lines mention it.
+OFFER=0; is_root && [ -t 0 ] && [ -t 1 ] && OFFER=1
+# For items the update script handles: sets WAYS to the "What to do" lines.
+# Usage: ways "installs them for you" "Do-it-yourself instructions:" '$ command' ...
+ways() {
+  local does=$1; shift
+  if [ "$OFFER" -eq 1 ]; then
+    WAYS=("Answer y at the end of this report, and the update script $does." "Or do it yourself. $1" "${@:2}")
+  else
+    WAYS=("$@")
+  fi
+}
 have() { command -v "$1" >/dev/null 2>&1; }
 pkg_installed() { dpkg-query -W -f='${db:Status-Abbrev}' "$1" 2>/dev/null | grep -q '^ii'; }
 upstream_ver() { local v=${1#*:}; echo "${v%%-*}"; }   # strip epoch and Debian revision
@@ -121,7 +135,11 @@ held_back_pkgs() {
 }
 
 echo "${C_B}AllStarLink node security check, version $SCRIPT_VERSION${C_0}"
-echo "Run on $(date '+%Y-%m-%d %H:%M %Z'). This script doesn't change your node's settings."
+if [ "$OFFER" -eq 1 ]; then
+  echo "Run on $(date '+%Y-%m-%d %H:%M %Z'). This check only looks. Nothing on your node changes unless you say yes at the end."
+else
+  echo "Run on $(date '+%Y-%m-%d %H:%M %Z'). This check only looks and doesn't change anything on your node."
+fi
 
 # ---------- Is this copy of the script current? ----------
 # Reads the one-line VERSION file from the GitHub repo. If GitHub can't be
@@ -199,8 +217,9 @@ case "$OS_CODENAME" in
 esac
 
 if [ -f /var/run/reboot-required ]; then
-  warn "The system says a restart is needed to finish an earlier update." "Restart the node at a quiet moment:" '$ sudo reboot'
   finding REBOOT_NEEDED
+  ways "restarts the node for you, after warning you first" "Restart the node at a quiet moment:" '$ sudo reboot'
+  warn "The system says a restart is needed to finish an earlier update." "${WAYS[@]}"
 else
   ok "The system hasn't asked for a restart. (Section 2 checks whether any programs still need one.)"
 fi
@@ -235,12 +254,12 @@ if [ "$UPGRADABLE" -eq 0 ]; then
   fi
 elif [ "$INSTALLABLE" -gt 0 ] && [ "$SEC_UPGRADABLE" -gt 0 ]; then
   finding UPDATES_WAITING
-  bad "$INSTALLABLE update(s) waiting, including security updates." \
-      "Install the updates, then run this script again. It will tell you whether anything needs restarting:" '$ sudo apt update && sudo apt upgrade' '$ sudo bash asl-node-check.sh'
+  ways "installs them for you" "Install them, then run this check again to see whether anything needs restarting:" '$ sudo apt update && sudo apt upgrade' '$ sudo bash asl-node-check.sh'
+  bad "$INSTALLABLE update(s) waiting, including security updates." "${WAYS[@]}"
 elif [ "$INSTALLABLE" -gt 0 ]; then
   finding UPDATES_WAITING
-  warn "$INSTALLABLE update(s) waiting (none marked as security updates)." \
-       "When convenient, run:" '$ sudo apt update && sudo apt upgrade'
+  ways "installs them for you" "When convenient, run:" '$ sudo apt update && sudo apt upgrade'
+  warn "$INSTALLABLE update(s) waiting (none marked as security updates)." "${WAYS[@]}"
 fi
 if [ "$N_HELD" -gt 0 ]; then
   held_msg="$N_HELD update(s) held back by apt: $HELD."
@@ -262,16 +281,16 @@ if pkg_installed unattended-upgrades && \
   ok "Automatic security updates are turned on."
 elif ! pkg_installed unattended-upgrades; then
   finding AUTO_UPDATES_OFF
-  warn "Automatic security updates are not turned on." \
-       "Run these two commands. The second one asks a question; answer Yes:" \
+  ways "turns them on for you" "Run these two commands. The second one asks a question; answer Yes:" \
        '$ sudo apt install unattended-upgrades' \
        '$ sudo dpkg-reconfigure -plow unattended-upgrades' \
-       "Then run this script again to confirm."
+       "Then run this check again to confirm."
+  warn "Automatic security updates are not turned on." "${WAYS[@]}"
 else
   finding AUTO_UPDATES_OFF
-  warn "Automatic security updates are installed but switched off." \
-       "Run this command, and answer Yes when asked:" '$ sudo dpkg-reconfigure -plow unattended-upgrades' \
-       "Then run this script again to confirm."
+  ways "switches them on for you" "Run this command, and answer Yes when asked:" '$ sudo dpkg-reconfigure -plow unattended-upgrades' \
+       "Then run this check again to confirm."
+  warn "Automatic security updates are installed but switched off." "${WAYS[@]}"
 fi
 
 # Programs still running old code from before an update (a library or program
@@ -305,21 +324,24 @@ else
   elif [ "$TOTAL" -gt 6 ] || { [ "$CORE_OLD" -eq 1 ] && [ "$TOTAL" -gt 2 ]; }; then
     # Many things, or the core system plus several services: one reboot is simpler and safer
     finding REBOOT_NEEDED
-    warn "Many services ($TOTAL), including core parts of the system, are still running old code from earlier updates." \
+    ways "restarts the node for you, after warning you first" \
          "The simplest fix is to restart the node at a quiet moment. It's offline for about a minute, and connected stations drop:" \
          '$ sudo reboot'
+    warn "Many services ($TOTAL), including core parts of the system, are still running old code from earlier updates." "${WAYS[@]}"
   else
     if [ "${#SAFE[@]}" -gt 0 ]; then
       finding SERVICES_OLD_CODE
-      warn "Some services are still running old code from before an update: ${SAFE[*]}." \
+      ways "restarts them for you" \
            "Restart them with this command. No reboot needed, and it doesn't affect your node's connections:" \
            "\$ sudo systemctl restart ${SAFE[*]}"
+      warn "Some services are still running old code from before an update: ${SAFE[*]}." "${WAYS[@]}"
     fi
     if [ "$ASTERISK_OLD" -eq 1 ]; then
       finding ASTERISK_OLD_CODE
-      warn "Asterisk (the node itself) is still running old code from before an update." \
+      ways "restarts it for you, after warning you first" \
            "Restarting it briefly drops every connected station, so pick a quiet moment:" \
            '$ sudo systemctl restart asterisk'
+      warn "Asterisk (the node itself) is still running old code from before an update." "${WAYS[@]}"
     fi
     if [ "${#NET[@]}" -gt 0 ]; then
       info "Network services (${NET[*]}) are running old code. Restarting them can briefly drop the network,"
@@ -365,8 +387,8 @@ else
       ok "PHP $branch ($up) includes the PHP2Shell fix (confirmed in its changelog)."
     elif [ -n "$fixed" ]; then
       finding UPDATES_WAITING
-      bad "PHP $branch is version $up. The PHP2Shell fix arrived in $fixed." \
-          "Install the updates, then run this script again. It will tell you whether anything needs restarting:" '$ sudo apt update && sudo apt upgrade' '$ sudo bash asl-node-check.sh'
+      ways "installs the fix for you" "Install them, then run this check again to see whether anything needs restarting:" '$ sudo apt update && sudo apt upgrade' '$ sudo bash asl-node-check.sh'
+      bad "PHP $branch is version $up. The PHP2Shell fix arrived in $fixed." "${WAYS[@]}"
     else
       bad "PHP $branch is too old to receive the PHP2Shell fix from Debian." \
           "Move to a current ASL3 image (Debian 13), or remove PHP if no dashboard needs it."
@@ -382,8 +404,8 @@ else
       started=$(svc_started_at "$svc"); changed=$(pkg_changed_at "$srcpkg")
       if [ "$started" -gt 0 ] && [ "$changed" -gt "$started" ]; then
         finding PHP_SERVICE_STALE
-        bad "$svc has been running since before PHP was last updated, so it may still be using the old code." \
-            "Restart it. This doesn't affect your node's connections:" "\$ sudo systemctl restart $svc"
+        ways "restarts it for you" "Restart it. This doesn't affect your node's connections:" "\$ sudo systemctl restart $svc"
+        bad "$svc has been running since before PHP was last updated, so it may still be using the old code." "${WAYS[@]}"
       else
         ok "$svc is running the currently installed PHP."
       fi
