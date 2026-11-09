@@ -1,6 +1,6 @@
 # asl-node-check
 
-Version 2.1, November 5, 2026 (update script: version 0.3)
+Version 2.2, November 9, 2026 (update script: version 0.4)
 
 **For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
@@ -76,7 +76,7 @@ rm asl-node-check.sh.[0-9]*
 
 The check only reports. If you'd like help with the updates it finds, a second script, `asl-node-update.sh`, can take care of them for you. Using it is entirely up to you.
 
-When the check finds waiting updates, automatic security updates switched off, or services still running old code, it describes the update script at the end of the report and asks:
+When the check finds waiting updates, automatic security updates switched off, services still running old code, or leftovers from removed software still running, it describes the update script at the end of the report and asks:
 
 ```
 Download the update script? [y/N]
@@ -96,6 +96,7 @@ sudo bash asl-node-check.sh
 - Install waiting updates, keeping your current settings files whenever an update offers a newer one.
 - Turn on automatic security updates.
 - Restart services still running old code from before an update.
+- Stop leftovers from software you removed. Removing a package deletes its files but doesn't always stop a program that's already running, and that program can't be restarted because its service is gone.
 - Restart Asterisk, after warning you that this briefly drops connected stations.
 - Restart the node when one restart is the better choice. This is always the last step, and it warns you first that your SSH session will end.
 
@@ -170,6 +171,7 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
+- Version 2.2, November 9, 2026: Recognizes leftovers from removed software: a program still running after its package was removed (DVSwitch is a common example). These used to show up as services running old code, and the update script then failed trying to restart them, with "Unit ... not found." The check now lists them separately, with the commands to stop them, and update script 0.4 stops them and has systemd forget them instead of trying a restart.
 - Version 2.1, November 5, 2026: The report's wording now matches what the check can do. The line under the title says nothing changes unless you say yes at the end, and each item the update script can handle says so in its "What to do" line, followed by the commands to do it yourself. The update script is unchanged.
 - Version 2.0, November 3, 2026: Tells apart updates a regular upgrade can install from ones apt holds back because they'd remove or replace another package. Held-back updates get their own line and the `sudo apt full-upgrade` command, and no longer trigger the update script. Update script 0.3 reports how many updates it actually installed and names any that were held back.
 - Version 1.9, November 3, 2026: At the end of the report, offers to download and run the new update script, `asl-node-update.sh` (version 0.2), and runs it only if it matches the fingerprint built into the check. Each answer is no unless you type y. The update script re-checks each item and asks before each step.

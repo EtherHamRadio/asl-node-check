@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # asl-node-update.sh — optional companion to asl-node-check.sh for AllStarLink 3 nodes
 #
-# Version 0.3 (November 3, 2026)
+# Version 0.4 (November 9, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -10,19 +10,20 @@
 # shows you each step and asks before doing it. Any answer other than y means no.
 #
 # What it handles: waiting updates, automatic security updates, services still
-# running old code, and a restart when one is needed.
+# running old code, leftovers from removed software that are still running,
+# and a restart when one is needed.
 # What it never touches: firewall rules, SSH settings, passwords, your router,
 # or your node's own settings in /etc/asterisk. Those stay advice only.
 #
 # Run it with:  sudo bash asl-node-update.sh
 # Just see the plan, change nothing:  sudo bash asl-node-update.sh --dry-run
 
-UPDATE_VERSION="0.3"
+UPDATE_VERSION="0.4"
 FINDINGS_DIR="/var/lib/asl-node-check"
 FINDINGS_FILE="$FINDINGS_DIR/findings"
 FINDINGS_FORMAT=1
 LOG_FILE="$FINDINGS_DIR/update.log"
-KNOWN_CODES="UPDATES_WAITING AUTO_UPDATES_OFF SERVICES_OLD_CODE PHP_SERVICE_STALE ASTERISK_OLD_CODE REBOOT_NEEDED"
+KNOWN_CODES="UPDATES_WAITING AUTO_UPDATES_OFF SERVICES_OLD_CODE PHP_SERVICE_STALE ASTERISK_OLD_CODE REBOOT_NEEDED ORPHAN_SERVICES"
 
 DRY_RUN=0
 for arg in "$@"; do
@@ -148,9 +149,14 @@ held_note() {
   echo "         them to you. Run the check again; it explains how to install them."
 }
 
-# Fills SAFE (plain services), ASTERISK_OLD, CORE_OLD, NET_COUNT
+# A service whose unit file is gone (its package was removed) but whose program is
+# still running. "systemctl restart" fails on these with "Unit ... not found";
+# they can only be stopped.
+unit_gone() { [ "$(systemctl show -p LoadState --value "$1" 2>/dev/null)" = "not-found" ]; }
+
+# Fills SAFE (plain services), ORPHAN (leftovers), ASTERISK_OLD, CORE_OLD, NET_COUNT
 scan_old_code() {
-  SAFE=(); ASTERISK_OLD=0; CORE_OLD=0; NET_COUNT=0
+  SAFE=(); ORPHAN=(); ASTERISK_OLD=0; CORE_OLD=0; NET_COUNT=0
   local pid unit name
   while read -r pid; do
     unit=$(ps -o unit= -p "$pid" 2>/dev/null | tr -d ' ')
@@ -162,7 +168,12 @@ scan_old_code() {
       dbus.service|dbus-broker.service|systemd-*|getty@*|serial-getty@*) CORE_OLD=1 ;;
       NetworkManager.service|ModemManager.service|networking.service|wpa_supplicant*|dhcpcd.service|tailscaled.service|wg-quick@*|ifup@*)
         NET_COUNT=$((NET_COUNT+1)) ;;
-      *.service) [[ " ${SAFE[*]} " == *" $name "* ]] || SAFE+=("$name") ;;
+      *.service)
+        if unit_gone "$unit"; then
+          [[ " ${ORPHAN[*]} " == *" $name "* ]] || ORPHAN+=("$name")
+        else
+          [[ " ${SAFE[*]} " == *" $name "* ]] || SAFE+=("$name")
+        fi ;;
     esac
   done < <(grep -lE ' /(usr/)?(lib|lib64|bin|sbin)/[^ ]* \(deleted\)$' /proc/[0-9]*/maps 2>/dev/null | cut -d/ -f3 | sort -un)
 }
@@ -253,7 +264,7 @@ scan_old_code
 STALE_PHP=$(stale_php_services)
 NEED_REBOOT=0
 [ -f /var/run/reboot-required ] && NEED_REBOOT=1
-TOTAL=$(( ${#SAFE[@]} + NET_COUNT + ASTERISK_OLD ))
+TOTAL=$(( ${#SAFE[@]} + ${#ORPHAN[@]} + NET_COUNT + ASTERISK_OLD ))
 if [ "$TOTAL" -gt 6 ] || { [ "$CORE_OLD" -eq 1 ] && [ "$TOTAL" -gt 2 ]; }; then NEED_REBOOT=1; fi
 
 if [ "$NEED_REBOOT" -eq 0 ]; then
@@ -272,6 +283,29 @@ if [ "$NEED_REBOOT" -eq 0 ]; then
     fi
   elif has SERVICES_OLD_CODE || has PHP_SERVICE_STALE; then
     echo; skip "No services are running old code anymore. Nothing to do."
+  fi
+
+  # Leftovers from removed software: stop them, then have systemd forget them.
+  if [ "${#ORPHAN[@]}" -gt 0 ]; then
+    ORPHAN_UNITS=()
+    for s in "${ORPHAN[@]}"; do ORPHAN_UNITS+=("$s.service"); done
+    echo; echo "${C_B}Leftovers from removed software${C_0}"
+    echo "  These are still running, but the software they came from has been removed: ${ORPHAN[*]}"
+    echo "  Their files are gone, so they can't be restarted, only stopped. Stopping them"
+    echo "  doesn't affect your node's connections. It runs:"
+    show_cmd "systemctl stop ${ORPHAN_UNITS[*]}"
+    show_cmd "systemctl daemon-reload"
+    if ask "Stop these leftovers?"; then
+      if systemctl stop "${ORPHAN_UNITS[@]}" && systemctl daemon-reload; then
+        done_ "Stopped: ${ORPHAN[*]}"
+      else
+        fail "Some leftovers didn't stop. A reboot will clear them, since nothing starts them again."
+      fi
+    else
+      skip "Left those running. A reboot will clear them, since nothing starts them again."
+    fi
+  elif has ORPHAN_SERVICES; then
+    echo; skip "No leftovers from removed software are running anymore. Nothing to do."
   fi
 
   if [ "$ASTERISK_OLD" -eq 1 ]; then

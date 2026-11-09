@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 2.1 (November 5, 2026)
+# Version 2.2 (November 9, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -31,7 +31,7 @@
 
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
-SCRIPT_VERSION="2.1"
+SCRIPT_VERSION="2.2"
 REPO_BASE="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check"
 REPO_RAW="$REPO_BASE/main"
 # The update script comes from this release's own tag (2.0, 2.1, ...), so it
@@ -47,7 +47,7 @@ UPDATE_RAW="$REPO_BASE/$UPDATE_REF"
 # runs the update script only if it matches exactly. Update this whenever
 # asl-node-update.sh changes:  sha256sum asl-node-update.sh
 UPDATE_SCRIPT="asl-node-update.sh"
-UPDATE_SHA256="64e9e59bb8067286a520b59339a87313a7f97cf897cb1379807bf4ce6add37b1"
+UPDATE_SHA256="db34ea961f873914212877824897539bf1b6e1e34467a0f069c68cb5813f674b"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -300,8 +300,11 @@ if [ -f /var/run/reboot-required ]; then
 elif ! is_root; then
   info "Checking for programs still running old code needs root."
 else
-  SAFE=(); NET=(); LATER=(); ASTERISK_OLD=0; CORE_OLD=0
+  SAFE=(); NET=(); LATER=(); ORPHAN=(); ASTERISK_OLD=0; CORE_OLD=0
   add() { local -n arr=$1; [[ " ${arr[*]} " == *" $2 "* ]] || arr+=("$2"); }
+  # A service whose unit file is gone (its package was removed) but whose program is
+  # still running. It can't be restarted, only stopped.
+  unit_gone() { [ "$(systemctl show -p LoadState --value "$1" 2>/dev/null)" = "not-found" ]; }
   while read -r pid; do
     unit=$(ps -o unit= -p "$pid" 2>/dev/null | tr -d ' ')
     name=${unit%.service}
@@ -314,11 +317,11 @@ else
       # restarting these can briefly drop the network, including your SSH session
       NetworkManager.service|ModemManager.service|networking.service|wpa_supplicant*|dhcpcd.service|tailscaled.service|wg-quick@*|ifup@*)
         add NET "$name" ;;
-      *.service) add SAFE "$name" ;;
+      *.service) if unit_gone "$unit"; then add ORPHAN "$name"; else add SAFE "$name"; fi ;;
     esac
   done < <(grep -lE ' /(usr/)?(lib|lib64|bin|sbin)/[^ ]* \(deleted\)$' /proc/[0-9]*/maps 2>/dev/null | cut -d/ -f3 | sort -un)
 
-  TOTAL=$(( ${#SAFE[@]} + ${#NET[@]} + ASTERISK_OLD ))
+  TOTAL=$(( ${#SAFE[@]} + ${#NET[@]} + ${#ORPHAN[@]} + ASTERISK_OLD ))
   if [ "$TOTAL" -eq 0 ] && [ "$CORE_OLD" -eq 0 ]; then
     ok "No running programs are using old code from before an update."
   elif [ "$TOTAL" -gt 6 ] || { [ "$CORE_OLD" -eq 1 ] && [ "$TOTAL" -gt 2 ]; }; then
@@ -335,6 +338,15 @@ else
            "Restart them with this command. No reboot needed, and it doesn't affect your node's connections:" \
            "\$ sudo systemctl restart ${SAFE[*]}"
       warn "Some services are still running old code from before an update: ${SAFE[*]}." "${WAYS[@]}"
+    fi
+    if [ "${#ORPHAN[@]}" -gt 0 ]; then
+      finding ORPHAN_SERVICES
+      ORPHAN_UNITS=$(printf '%s.service ' "${ORPHAN[@]}")
+      ways "stops them for you" \
+           "Stop them with these two commands. It doesn't affect your node's connections:" \
+           "\$ sudo systemctl stop ${ORPHAN_UNITS% }" \
+           '$ sudo systemctl daemon-reload'
+      warn "Leftovers from software you removed are still running: ${ORPHAN[*]}. Their files are gone, so they can't be restarted, only stopped." "${WAYS[@]}"
     fi
     if [ "$ASTERISK_OLD" -eq 1 ]; then
       finding ASTERISK_OLD_CODE
@@ -575,8 +587,9 @@ if [ "${#FINDINGS[@]}" -gt 0 ] && is_root && [ -t 0 ] && [ -t 1 ]; then
   LOCAL_UPDATE="$HERE/$UPDATE_SCRIPT"
   echo
   echo "${C_B}Optional:${C_0} the update script ($UPDATE_SCRIPT) can take care of ${#FINDINGS[@]} of these for you."
-  echo "It installs waiting updates, turns on automatic security updates, and restarts"
-  echo "services that are still running old code. It shows each step and asks first."
+  echo "It installs waiting updates, turns on automatic security updates, restarts"
+  echo "services that are still running old code, and stops leftovers from removed"
+  echo "software. It shows each step and asks first."
   echo "It never touches your firewall, SSH settings, or node settings."
   READY=0; SAVED_NOW=0
   if sha_ok "$LOCAL_UPDATE"; then
