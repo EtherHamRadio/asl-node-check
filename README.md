@@ -1,6 +1,6 @@
 # asl-node-check
 
-Version 2.2, November 9, 2026 (update script: version 0.4)
+Version 2.3, November 12, 2026 (update script: version 0.5)
 
 **For AllStarLink 3 (ASL3) nodes only.** It does not work on HamVoIP or ASL2 nodes. It checks which system it's on and stops, with an explanation, if the node isn't running ASL3. If your node runs HamVoIP or ASL2, its operating system no longer gets regular security updates, and moving to ASL3 is the fix.
 
@@ -171,6 +171,7 @@ MIT License. Copyright (c) 2026 Tom Salzer, KJ7T.
 
 ## Version History
 
+- Version 2.3, November 12, 2026: Fixes file permissions after the update script runs. The check used a private setting (umask 077) while saving its findings, and the update script it started inherited it, so any file created from scratch during the run came out readable by root only. The one seen in practice was `/etc/apt/apt.conf.d/20auto-upgrades` when the update script turned on automatic security updates: it worked, but every apt command run without sudo then warned "Unable to read /etc/apt/apt.conf.d/20auto-upgrades." The check now keeps that setting to itself, and update script 0.5 sets normal permissions on its own and writes 20auto-upgrades with Debian's usual 644. If a node already has the warning, fix it with `sudo chmod 644 /etc/apt/apt.conf.d/20auto-upgrades`.
 - Version 2.2, November 9, 2026: Recognizes leftovers from removed software: a program still running after its package was removed (DVSwitch is a common example). These used to show up as services running old code, and the update script then failed trying to restart them, with "Unit ... not found." The check now lists them separately, with the commands to stop them, and update script 0.4 stops them and has systemd forget them instead of trying a restart.
 - Version 2.1, November 5, 2026: The report's wording now matches what the check can do. The line under the title says nothing changes unless you say yes at the end, and each item the update script can handle says so in its "What to do" line, followed by the commands to do it yourself. The update script is unchanged.
 - Version 2.0, November 3, 2026: Tells apart updates a regular upgrade can install from ones apt holds back because they'd remove or replace another package. Held-back updates get their own line and the `sudo apt full-upgrade` command, and no longer trigger the update script. Update script 0.3 reports how many updates it actually installed and names any that were held back.

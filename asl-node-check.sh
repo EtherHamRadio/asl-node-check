@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 2.2 (November 9, 2026)
+# Version 2.3 (November 12, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -31,7 +31,7 @@
 
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
-SCRIPT_VERSION="2.2"
+SCRIPT_VERSION="2.3"
 REPO_BASE="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check"
 REPO_RAW="$REPO_BASE/main"
 # The update script comes from this release's own tag (2.0, 2.1, ...), so it
@@ -47,7 +47,7 @@ UPDATE_RAW="$REPO_BASE/$UPDATE_REF"
 # runs the update script only if it matches exactly. Update this whenever
 # asl-node-update.sh changes:  sha256sum asl-node-update.sh
 UPDATE_SCRIPT="asl-node-update.sh"
-UPDATE_SHA256="db34ea961f873914212877824897539bf1b6e1e34467a0f069c68cb5813f674b"
+UPDATE_SHA256="09e5a403b0f82db79b51f1ce72c533a5582be858652169de311b83529951069f"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
@@ -569,7 +569,10 @@ fi
 # ---------- Optional: offer the update script ----------
 # Asks only when there's something the update script handles, the check ran as
 # root, and someone is at the keyboard. Any answer other than y means no.
-save_findings() {
+# Runs in a subshell ( ... ) so the private umask stays inside this function.
+# Before 2.3 it leaked into the update script, and anything that created a file
+# from scratch (like 20auto-upgrades) ended up readable by root only.
+save_findings() (
   umask 077
   mkdir -p "$FINDINGS_DIR" && chmod 700 "$FINDINGS_DIR" && {
     echo "# asl-node-check findings. Codes only; asl-node-update.sh re-checks each one first."
@@ -578,7 +581,7 @@ save_findings() {
     echo "saved=$(date +%s)"
     printf '%s\n' "${FINDINGS[@]}"
   } > "$FINDINGS_FILE.tmp" && mv -f "$FINDINGS_FILE.tmp" "$FINDINGS_FILE"
-}
+)
 sha_ok() { [ -f "$1" ] && [ "$(sha256sum "$1" 2>/dev/null | cut -d' ' -f1)" = "$UPDATE_SHA256" ]; }
 
 if [ "${#FINDINGS[@]}" -gt 0 ] && is_root && [ -t 0 ] && [ -t 1 ]; then

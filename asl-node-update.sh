@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # asl-node-update.sh — optional companion to asl-node-check.sh for AllStarLink 3 nodes
 #
-# Version 0.4 (November 9, 2026)
+# Version 0.5 (November 12, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -18,7 +18,10 @@
 # Run it with:  sudo bash asl-node-update.sh
 # Just see the plan, change nothing:  sudo bash asl-node-update.sh --dry-run
 
-UPDATE_VERSION="0.4"
+UPDATE_VERSION="0.5"
+# Files this script or apt creates get Debian's normal permissions, whatever
+# umask it was started with (check 2.2 and earlier passed along umask 077).
+umask 022
 FINDINGS_DIR="/var/lib/asl-node-check"
 FINDINGS_FILE="$FINDINGS_DIR/findings"
 FINDINGS_FORMAT=1
@@ -212,6 +215,7 @@ if has AUTO_UPDATES_OFF; then
       AU=/etc/apt/apt.conf.d/20auto-upgrades
       [ -f "$AU" ] && cp -p "$AU" "$AU.bak-$(date +%Y%m%d-%H%M%S)"
       printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' > "$AU"
+      chmod 644 "$AU"
       if auto_updates_on; then done_ "Automatic security updates are on."; else fail "Automatic updates still don't show as on. Run the check again for details."; fi
     else
       skip "Left automatic security updates as they are."
