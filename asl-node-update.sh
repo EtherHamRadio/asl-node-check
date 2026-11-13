@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # asl-node-update.sh — optional companion to asl-node-check.sh for AllStarLink 3 nodes
 #
-# Version 0.5 (November 12, 2026)
+# Version 0.6 (November 13, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -18,7 +18,7 @@
 # Run it with:  sudo bash asl-node-update.sh
 # Just see the plan, change nothing:  sudo bash asl-node-update.sh --dry-run
 
-UPDATE_VERSION="0.5"
+UPDATE_VERSION="0.6"
 # Files this script or apt creates get Debian's normal permissions, whatever
 # umask it was started with (check 2.2 and earlier passed along umask 077).
 umask 022
@@ -89,6 +89,40 @@ if [ "$DRY_RUN" -eq 0 ] && ! [ -t 0 ]; then
   exit 1
 fi
 
+# ---------- Tidy up backups that older versions left where apt reads them ----------
+# Update script 0.5 and earlier saved the old 20auto-upgrades next to the
+# original, as /etc/apt/apt.conf.d/20auto-upgrades.bak-DATE. apt skips that
+# name but prints "N: Ignoring file ..." every time it runs. Move any such
+# copies to /var/backups, where this script now keeps them. Nothing is deleted.
+BACKUP_DIR="/var/backups"
+NOTHING_CHANGED="Nothing was changed."
+OLD_BAKS=()
+for f in /etc/apt/apt.conf.d/20auto-upgrades.bak-*; do
+  [ -f "$f" ] && [ ! -L "$f" ] && OLD_BAKS+=("$f")
+done
+if [ "${#OLD_BAKS[@]}" -gt 0 ]; then
+  echo; echo "${C_B}Old backup copies in apt's settings folder${C_0}"
+  echo "  An earlier version of this script left these where apt reads its settings, so apt"
+  echo "  prints \"N: Ignoring file ...\" every time it runs. Moving them to $BACKUP_DIR:"
+  for f in "${OLD_BAKS[@]}"; do show_cmd "mv $f $BACKUP_DIR/"; done
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "  (dry run: would move them)"
+  else
+    mkdir -p "$BACKUP_DIR"
+    MOVED=0
+    for f in "${OLD_BAKS[@]}"; do
+      mv -n "$f" "$BACKUP_DIR/" 2>/dev/null
+      [ -e "$f" ] || MOVED=$((MOVED + 1))
+    done
+    if [ "$MOVED" -eq "${#OLD_BAKS[@]}" ]; then
+      done_ "Moved $MOVED old backup copy(s) to $BACKUP_DIR. apt's \"Ignoring file\" notice is gone."
+    else
+      fail "Moved $MOVED of ${#OLD_BAKS[@]}. A file with the same name may already be in $BACKUP_DIR; the rest are still in /etc/apt/apt.conf.d."
+    fi
+    [ "$MOVED" -gt 0 ] && NOTHING_CHANGED="Nothing else was changed."
+  fi
+fi
+
 # ---------- Read the saved findings, trusting only a file root wrote ----------
 if [ ! -e "$FINDINGS_FILE" ]; then
   echo
@@ -96,7 +130,7 @@ if [ ! -e "$FINDINGS_FILE" ]; then
   echo "    sudo bash asl-node-check.sh"
   exit 0
 fi
-bad_file() { echo "The findings file isn't safe to use ($1). Nothing was changed."; echo "Run the check again and save a fresh copy:  sudo bash asl-node-check.sh"; exit 1; }
+bad_file() { echo "The findings file isn't safe to use ($1). $NOTHING_CHANGED"; echo "Run the check again and save a fresh copy:  sudo bash asl-node-check.sh"; exit 1; }
 [ -L "$FINDINGS_DIR" ] || [ -L "$FINDINGS_FILE" ] && bad_file "it's a link, not a regular file"
 [ -f "$FINDINGS_FILE" ] || bad_file "it isn't a regular file"
 for path in "$FINDINGS_DIR" "$FINDINGS_FILE"; do
@@ -129,7 +163,7 @@ echo
 echo "Using findings saved by asl-node-check $CHECK_VER, $AGE_DAYS day(s) ago."
 [ "$AGE_DAYS" -gt 7 ] && echo "${C_WARN}They're more than a week old.${C_0} Each one is checked again below, but running the check again first is a good idea."
 if [ "${#CODES[@]}" -eq 0 ]; then
-  echo "Nothing in the saved findings is something this script handles. Nothing was changed."
+  echo "Nothing in the saved findings is something this script handles. $NOTHING_CHANGED"
   exit 0
 fi
 log "run started (update $UPDATE_VERSION, findings from check $CHECK_VER: ${CODES[*]})"
@@ -207,13 +241,18 @@ if has AUTO_UPDATES_OFF; then
     echo "  Automatic security updates are off. This step installs unattended-upgrades (if needed)"
     echo "  and switches it on, the same as answering Yes in dpkg-reconfigure. It runs:"
     pkg_installed unattended-upgrades || show_cmd "apt-get install -y unattended-upgrades"
-    show_cmd "write /etc/apt/apt.conf.d/20auto-upgrades (the old one is kept as a .bak copy)"
+    show_cmd "write /etc/apt/apt.conf.d/20auto-upgrades (a copy of the old one is kept in $BACKUP_DIR)"
     if ask "Turn on automatic security updates?"; then
       if ! pkg_installed unattended-upgrades; then
         DEBIAN_FRONTEND=noninteractive apt-get install -y unattended-upgrades || { fail "Couldn't install unattended-upgrades."; }
       fi
       AU=/etc/apt/apt.conf.d/20auto-upgrades
-      [ -f "$AU" ] && cp -p "$AU" "$AU.bak-$(date +%Y%m%d-%H%M%S)"
+      # Keep the copy outside /etc/apt/apt.conf.d: apt reads every file there and
+      # complains about names it doesn't recognize ("N: Ignoring file ...").
+      if [ -f "$AU" ]; then
+        mkdir -p "$BACKUP_DIR"
+        cp -p "$AU" "$BACKUP_DIR/20auto-upgrades.bak-$(date +%Y%m%d-%H%M%S)"
+      fi
       printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' > "$AU"
       chmod 644 "$AU"
       if auto_updates_on; then done_ "Automatic security updates are on."; else fail "Automatic updates still don't show as on. Run the check again for details."; fi

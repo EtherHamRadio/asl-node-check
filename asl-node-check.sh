@@ -3,7 +3,7 @@
 #
 # FOR ASL3 NODES ONLY. Not for HamVoIP or ASL2 nodes: it checks for ASL3 and
 # stops on anything else.
-# Version 2.3 (November 12, 2026)
+# Version 2.4 (November 13, 2026)
 # https://github.com/EtherHamRadio/asl-node-check
 # MIT License. Copyright (c) 2026 Tom Salzer, KJ7T
 #
@@ -31,7 +31,7 @@
 
 # Named SCRIPT_VERSION, not VERSION: /etc/os-release (read in section 1) sets
 # its own VERSION variable, which would overwrite ours.
-SCRIPT_VERSION="2.3"
+SCRIPT_VERSION="2.4"
 REPO_BASE="https://raw.githubusercontent.com/EtherHamRadio/asl-node-check"
 REPO_RAW="$REPO_BASE/main"
 # The update script comes from this release's own tag (2.0, 2.1, ...), so it
@@ -47,7 +47,7 @@ UPDATE_RAW="$REPO_BASE/$UPDATE_REF"
 # runs the update script only if it matches exactly. Update this whenever
 # asl-node-update.sh changes:  sha256sum asl-node-update.sh
 UPDATE_SCRIPT="asl-node-update.sh"
-UPDATE_SHA256="09e5a403b0f82db79b51f1ce72c533a5582be858652169de311b83529951069f"
+UPDATE_SHA256="d47b1f782e6d0dfcd97f1a418c2558a705de47e65fe86b287d8ffa5c94d8b982"
 
 # PHP releases that fix CVE-2026-109618 and CVE-2026-109619 ("PHP2Shell").
 # Branches not listed here (7.x, 8.0, 8.1) have no packaged fix on Debian.
